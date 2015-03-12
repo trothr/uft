@@ -1,0 +1,23 @@
+#
+#
+#	  Name: uft.lsm
+#	  Date: 1999-Nov-07 (Sun)
+#		2007-Jan-01 (Sun)
+#
+#
+
+Begin3
+Title:		UFT - Internet SENDFILE
+Version:	1.9
+Entered-date:	2014-Jun-01 (Sun)
+Description:	send files automatically
+Keywords:	sf uft sendfile transmit nje
+Author: 	sirsanta@casita.net (Rick Troth)
+Maintained-by:	sirsanta@casita.net (Rick Troth)
+Primary-site:	casita.houston.tx.us /pub/uft
+		50K uft-1.9.tar.gz
+		1K uft.lsm
+Copying-policy: Freely Distributable
+End
+
+
