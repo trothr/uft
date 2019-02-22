@@ -5,15 +5,15 @@ This is an overview of Unsolicited File Transfer Protocol in markdown format.
 
 ## UFT Control Verbs
 
-*FILE
-*PIPE
-*USER
-*TYPE
-*DATA
-*AUXDATA
-*EOF
-*ABORT
-*META
+* FILE
+* PIPE
+* USER
+* TYPE
+* DATA
+* AUXDATA
+* EOF
+* ABORT
+* META
 
 
 ## UFT Meta Verbs
