@@ -3,7 +3,7 @@
 This is an overview of Unsolicited File Transfer Protocol in markdown format.
 
 
-# UFT Control Verbs
+## UFT Control Verbs
 
 *FILE
 *PIPE
@@ -16,7 +16,7 @@ This is an overview of Unsolicited File Transfer Protocol in markdown format.
 *META
 
 
-# UFT Meta Verbs
+## UFT Meta Verbs
 
 *NAME
 *DATE
@@ -39,7 +39,7 @@ This is an overview of Unsolicited File Transfer Protocol in markdown format.
 *SEQ
 
 
-# UFT Response Codes
+## UFT Response Codes
 
 UFT response code numbers are unique.
 Any single response code can be mapped to a specific condition, status, or meaning
