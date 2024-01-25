@@ -13,9 +13,9 @@
 
 /*  the version number and copyright  */
 #define 	UFT_PROTOCOL	"UFT/1"
-#define 	UFT_VERSION	"POSIXUFT/1.9"
+#define 	UFT_VERSION	"POSIXUFT/1.10.1"
 #define 	UFT_COPYRIGHT	"© Copyright 1995 Richard M. Troth"
-#define 	UFT_VRM 	"1.9"
+#define 	UFT_VRM 	"1.10.1"
 
 /*  server constants  */
 /*  the SPOOLDIR has a sub-directory for each recipient  */
@@ -136,8 +136,9 @@ static char *uft_copyright = UFT_COPYRIGHT;
 
 
 
-
-#include <ustat.h>
+#include <unistd.h>
+#include <time.h>
+#include <fcntl.h>
 
 struct uft_stat {
     int         uft_ino;        /* UFT spoolid */

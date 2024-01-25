@@ -2,7 +2,7 @@
 LDFLAGS 	=	
 LIBS		=	
 CFLAGS		=	
-PREFIX		=	/usr/local
+PREFIX		=	/usr/opt/uft-1.10.1
  
 .PHONY: 	clean distclean config help 
  
@@ -161,11 +161,9 @@ msgd:		makefile msgd.o msgdlmsg.o \
 		strip msgd 
  
 tell:		makefile msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o homedir.o \
-			uftcwack.o
+			getline.o tcpio.o userid.o putline.o aecs.o homedir.o 
 		$(CC) -o tell msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o homedir.o \
-			uftcwack.o
+			getline.o tcpio.o userid.o putline.o aecs.o homedir.o 
 		strip tell 
  
 imsg:		makefile imsg.o putline.o getline.o aecs.o 
