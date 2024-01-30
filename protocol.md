@@ -18,16 +18,17 @@ in markdown format.
 
 A sample sequence might be ...
 
+    (wait for the herald from the server)
     FILE size from auth
-    (wait for actknowledgement from server)
+    (wait for acknowledgement from server)
     USER recipient
-    (wait for actknowledgement from server)
+    (wait for acknowledgement from server)
     TYPE A
-    (wait for actknowledgement from server)
+    (wait for acknowledgement from server)
     DATA 1234
-    (send 1234 bytes and wait for actknowledgement)
+    (send 1234 bytes and wait for acknowledgement)
     EOF
-    (wait for actknowledgement from server)
+    (wait for acknowledgement from server)
     QUIT
 
 That transaction uses 6 primary commands and does not require any
