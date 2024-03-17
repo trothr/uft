@@ -18,8 +18,7 @@
 #endif
 
 /* ------------------------------------------------------------------ */
-int uftdimsg(user,file,from,type)
-  char   *user, *file, *type, *from;
+int uftdimsg(char*user,char*file,char*from,char*type)
   /*  spoolid (file) is character in case spoolids go non-numeric
 	(discouraged)  or the number of digits increases (likely)  */
   {

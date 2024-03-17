@@ -9,13 +9,15 @@
 
 #ifndef 	_UFT_HEADER_
 
+#include "tcpio.h"
+
 #define         UFT_ANONYMOUS
 
 /*  the version number and copyright  */
 #define 	UFT_PROTOCOL	"UFT/1"
-#define 	UFT_VERSION	"POSIXUFT/1.10.1"
-#define 	UFT_COPYRIGHT	"© Copyright 1995 Richard M. Troth"
-#define 	UFT_VRM 	"1.10.1"
+#define 	UFT_VERSION	"POSIXUFT/1.10.2"
+#define 	UFT_COPYRIGHT	"© Copyright 1995, 2024 Richard M. Troth"
+#define 	UFT_VRM 	"1.10.2"
 
 /*  server constants  */
 /*  the SPOOLDIR has a sub-directory for each recipient  */
@@ -89,8 +91,6 @@ struct		UFTFILE
 		char	title[64];
 			} ;
 
-struct  UFTFILE  uftfile0 ;
-
 #define 	UFT_B64_CODE	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 /*  RDR FILE >this< SENT FROM $from RDR WAS yadda yadda  */
@@ -110,9 +110,6 @@ xxx FILE nnnn  SEND FROM u@h
  */
 
 static char *uft_copyright = UFT_COPYRIGHT;
-
-#define 	_UFT_HEADER_
-#endif
 
 
 /* © Copyright 1996, Richard M. Troth, all rights reserved.  <plaintext>
@@ -218,18 +215,32 @@ uft_user.html ==
  */
 
 
-
-
-
-
-
 ssize_t getuftentries(int,char*,size_t,off_t*);
 /* ssize_t getuftentries(int fd, char *buf, size_t nbytes , off_t *basep); */
 
 int uftopen(const char *,int,mode_t);
 /* int uftopen(const char *pathname, int flags, mode_t mode); */
 
+int uft_getline(int,char*);
+int uft_putline(int,char*);
+int uft_readspan(int,char*,int);
 
+int uftddata(int,int,int);
+int uftdnext();
+int uftduser(char*);
+int uftdmove(int,int);
+int uftdimsg(char*,char*,char*,char*);
+int uftdlmsg(char*,char*,char*,char*);
+int uftdlist(int,char*);
 
+int uftcwack(int,char*,int);
+int uftctext(int,char*,int);
+
+char*uftcprot(mode_t);
+
+int abbrev(char*,char*,int);
+
+#define 	_UFT_HEADER_
+#endif
 
 

@@ -11,18 +11,19 @@
  *
  */
 
-#include	<pwd.h>
-#include	<errno.h>
+#include <pwd.h>
+#include <errno.h>
 extern	int	errno;
-#include	<unistd.h>
-#include	"uft.h"
+#include <unistd.h>
+#include <sys/stat.h>
+
+#include "uft.h"
 
 /* ------------------------------------------------------------ UFTDUSER
  *  Move into the specified user's UFT sub-dir,  possibly creating it,
  *  and try to  seteuid()  to that user too.
  */
-int uftduser(user)
-  char   *user;
+int uftduser(char*user)
   {
     int 	i, uuid;
     struct passwd *pwdent;

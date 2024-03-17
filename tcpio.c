@@ -17,46 +17,49 @@
  *
  */
 
-#include        <string.h>
-#include        <sys/types.h>
-#include        <sys/socket.h>
-#include        <stdio.h>
-#include        <netdb.h>
- 
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <netdb.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "tcpio.h"
+
 #define         TCPSMALL        256
 #define         TCPLARGE        4096
- 
+
 int     tcp_ubuf[TCPLARGE];
 int     tcp_uoff, tcp_uend;
 char    tcp_umsg[TCPSMALL];
- 
+
 /* if we're on IBM OpenVM, define OECS */
 #ifdef          __OPEN_VM
 #ifndef         OECS
 #define         OECS
 #endif
 #endif
- 
+
 /* if we're on IBM OpenEdition, define OECS */
 #ifdef          _OE_SOCKETS
 #ifndef         OECS
 #define         OECS
 #endif
 #endif
- 
+
 /* ------------------------------------------------------------- TCPOPEN
  *  Tries to mimick  open(path,flags[,mode])
  *  but connects to a TCP port,  not a local file.
  */
-int tcpopen(host,flag,mode)
-  char  *host;  int  flag;  int  mode;
+int tcpopen(char*host,int flag,int mode)
   {
     int         s, i, port, rc, j;
     struct sockaddr name;
     struct hostent *hent, myhent;
     char       *myhental[2], myhenta0[4], myhenta1[4];
     char        temp[TCPSMALL], *p, *q;
- 
+
     /*  parse host address and port number by colon  */
     p = host; host = temp; i = 0;
     while (i < TCPSMALL && *p != 0x00 && *p != ':')
@@ -69,7 +72,7 @@ int tcpopen(host,flag,mode)
             temp[i++] = *q++; temp[i++] = 0x00;
         port = atoi(p);
       }
- 
+
     /*  figure out where to connect  */
     hent = gethostbyname(host);
     if (hent == NULL)
@@ -83,7 +86,7 @@ int tcpopen(host,flag,mode)
         hent->h_addr_list[1] = myhenta1;/*  address 1  */
         hent->h_addrtype = AF_INET;
         hent->h_length = 4;
- 
+
         /*  try to pick-apart the string as dotted decimal  */
         hent->h_addr_list[0][0] = atoi(p);
         while (*p != '.' && *p != 0x00) p++; p++;
@@ -95,19 +98,19 @@ int tcpopen(host,flag,mode)
         while (*p != '.' && *p != 0x00) p++; p++;
         if (*p < '0' || '9' < *p) return -1;
         hent->h_addr_list[0][3] = atoi(p);
- 
+
         /*  dotted decimal worked!  now terminate the list  */
         hent->h_addr_list[1][0] = 0;    hent->h_addr_list[1][1] = 0;
         hent->h_addr_list[1][2] = 0;    hent->h_addr_list[1][3] = 0;
         /*  better form might be to use NULL pointer?  */
         hent->h_addr_list[1] = NULL;
- 
+
         /*  and what else do we need to set?  */
         hent->h_name = host;
         /*  should probably call gethostbyaddr()
             at this point;  maybe in the next rev  */
       }
- 
+
     /*  gimme a socket  */
     s = socket(AF_INET,SOCK_STREAM,0);
     if (s < 0)
@@ -117,33 +120,33 @@ int tcpopen(host,flag,mode)
  */
         return s;
       }
- 
+
     /*  build that structure  */
     name.sa_family = AF_INET;
     name.sa_data[0] = (port >> 8) & 0xFF;
     name.sa_data[1] = port & 0xFF;
- 
+
     /*  try address one-by-one  */
     for (i = 0; hent->h_addr_list[i] != NULL; i++)
       {
         /*  any more addresses?  */
         if (hent->h_addr_list[i] == NULL) break;
         if (hent->h_addr_list[i][0] == 0x00) break;
- 
+
         /*  fill-in this address to the structure  */
         for (j = 0; j < hent->h_length; j++)
             name.sa_data[j+2] = hent->h_addr_list[i][j];
         name.sa_data[j+2] = 0x00;       /*  terminate  */
- 
+
         /*  note this attempt  */
         (void) sprintf(tcp_umsg,"trying %d.%d.%d.%d\n",name.sa_data[2],
                 name.sa_data[3],name.sa_data[4],name.sa_data[5]);
- 
+
         /*  can we talk?  */
         rc = connect(s, &name, 16);
         if (rc == 0) return s;
       }
- 
+
     /*  can't seem to reach this host on this port  :-(  */
     (void) close(s);
     if (rc < 0)
@@ -155,23 +158,22 @@ int tcpopen(host,flag,mode)
       }
     return -1;
   }
- 
+
 /* -------------------------------------------------------------- MXOPEN
  *  Like  tcpopen(),  but connects to a Mail eXchanger IP host.
  */
-int mxopen(host,flag,mode)
+int mxopen(char*host,int flag,int mode)
   {
     return -1;
   }
- 
+
 /* ------------------------------------------------------------ TCPCLOSE
  */
-int tcpclose(fd)
-  int fd;
+int tcpclose(int fd)
   {
     return close(fd);
   }
- 
+
 /* ------------------------------------------------------------- TCPGETS
  *   Operation: Reads a CR/LF terminated string from socket s
  *              into buffer b.  Returns the length of that string.
@@ -180,17 +182,16 @@ int tcpclose(fd)
  *
  *    See also: getline.c, putline.c
  */
-int tcpgets(s,b,l)
-  int  s;  char  *b;  int  l;
+int tcpgets(int s,char*b,int l)
   {
     char       *p;
     int         i;
- 
+
 #ifdef  OECS
     char        snl;
     snl = '\n';
 #endif
- 
+
     p = b;
     for (i = 0; i < l; i++)
       {
@@ -221,7 +222,7 @@ int tcpgets(s,b,l)
         p++;                            /*  increment pointer  */
       }
     *p = 0x00;          /*  NULL terminate,  even if NULL  */
- 
+
     i = p - b;          /*  calculate the length  */
     if (i > 0 && b[i-1] == '\r')        /*  trailing CR?  */
       {
@@ -229,12 +230,12 @@ int tcpgets(s,b,l)
         p--;            /*  backspace  */
         *p = 0x00;      /*  remove trailing CR  */
       }
- 
+
     tcp_uoff = 0;
     tcp_uend = 0;
     return i;
   }
- 
+
 /* ------------------------------------------------------------- TCPPUTS
  *   Operation: Writes the NULL terminated string from buffer b
  *              to socket s with CR/LF (network text) line termination.
@@ -244,18 +245,16 @@ int tcpgets(s,b,l)
  *
  *    See also: getline.c, putline.c
  */
-int tcpputs(s,b)
-  int     s;
-  char   *b;
+int tcpputs(int s,char*b)
   {
     int         i,  j;
     char        temp[4096];
- 
+
 #ifdef  OECS
     char        snl;
     snl = '\n';
 #endif
- 
+
     /*  copy to buffer because we'll modify slightly  */
     for (i = 0; b[i] != 0x00 && i < 4094; i++) temp[i] = b[i];
     temp[i] = 0x00;
@@ -268,30 +267,28 @@ int tcpputs(s,b)
     temp[i+0] = '\r';
     temp[i+1] = '\n';
 #endif
- 
+
     /*  write entire string, WITH line interpolation,  at once  */
     j = write(s,temp,i+2);
- 
+
     if (j != i+2) return -1;
     return i;
   }
- 
+
 /* ------------------------------------------------------------ TCPWRITE
  */
-int tcpwrite(fd,s,n)
-  int fd;  char *s;  int n;
+int tcpwrite(int fd,char*s,int n)
   {
     return write(fd,s,n);
   }
- 
+
 /* ------------------------------------------------------------- TCPREAD
  */
-int tcpread(fd,s,n)
-  int fd;  char *s;  int n;
+int tcpread(int fd,char*s,int n)
   {
     return read(fd,s,n);
   }
- 
+
 /* ------------------------------------------------------------ TCPIDENT
  *
  *        Name: tcpident.c
@@ -306,19 +303,18 @@ int tcpread(fd,s,n)
  *              Sadly (to me) someone yanked it (UFT entirely)
  *              the very first day I was gone.
  */
- 
+
 #ifndef         NULL
 #define         NULL            0x0000
 #endif
- 
+
 #define         HOST_BSZ        128
 #define         USER_BSZ        64
 #define         TEMP_BSZ        256
- 
+
 #define         IDENT_PORT      113
- 
-int tcpident(sock,buff,size)
-  int  sock;  char  *buff;  int  size;
+
+int tcpident(int sock,char*buff,int size)
   {
     struct  sockaddr    sadr;
     struct  hostent    *hent;
@@ -329,15 +325,15 @@ int tcpident(sock,buff,size)
     char        user[USER_BSZ];
     int         plcl, prmt;
     char       *p;
- 
+
 /*
 (void) netline(2,">>>>>>>>");
  */
- 
+
     /*  preload a few storage areas  */
     host[0] = 0x00;
     user[0] = 0x00;
- 
+
     /*  first,  tell me about this end  */
     slen = sizeof(sadr);
     rc = getsockname(sock,&sadr,&slen);
@@ -350,7 +346,7 @@ int tcpident(sock,buff,size)
                 else return -1;
       }
     styp = sadr.sa_family;
- 
+
     /*  where's the offset into the address?  */
     switch (styp)
       {
@@ -359,17 +355,17 @@ int tcpident(sock,buff,size)
         default:        soff = 2;
                         break;
       }
- 
+
     /*  and snag that port number  */
     plcl = 0;
     for (i = 0; i < soff; i++)
         plcl = (plcl << 8) + (sadr.sa_data[i] & 0xFF);
- 
+
 /*
 (void) sprintf(temp,"PORT=%d (mine)",plcl);
 (void) netline(2,temp);
  */
- 
+
     /*  what's the host on the other end?  */
     slen = sizeof(sadr);
     rc = getpeername(sock,&sadr,&slen);
@@ -382,7 +378,7 @@ int tcpident(sock,buff,size)
                 else return -1;
       }
     styp = sadr.sa_family;
- 
+
     /*  where's the offset into the address?  */
     switch (styp)
       {
@@ -391,16 +387,16 @@ int tcpident(sock,buff,size)
         default:        soff = 2;
                         break;
       }
- 
+
     /*  now copy the address  */
     for (i = 0; i < slen; i++)
         hadd[i] = sadr.sa_data[i+soff];
- 
+
     /*  and snag that port number  */
     prmt = 0;
     for (i = 0; i < soff; i++)
         prmt = (prmt << 8) + (sadr.sa_data[i] & 0xFF);
- 
+
 /*
 (void) sprintf(temp,"PORT=%d (yours)",prmt);
 (void) netline(2,temp);
@@ -417,12 +413,12 @@ int tcpident(sock,buff,size)
       }
     strncpy(host,hent->h_name,HOST_BSZ);    /*  keep it  */
     host[HOST_BSZ-1] = 0x00;    /*  safety net  */
- 
+
 /*
 (void) sprintf(temp,"HOST=%s (yours)",host);
 (void) netline(2,temp);
  */
- 
+
 #ifdef USE_IDENT
     /*  try a little IDENT client/server action  */
     (void) sprintf(temp,"%s:%d",host,IDENT_PORT);
@@ -433,7 +429,7 @@ int tcpident(sock,buff,size)
         (void) sprintf(temp,"%d , %d",prmt,plcl);
         (void) tcpputs(sock,temp);
         (void) tcpgets(sock,temp,TEMP_BSZ);
- 
+
         for (p = temp; *p != 0x00 && *p != ':'; p++);
         if (*p == ':')
           {
@@ -454,20 +450,20 @@ int tcpident(sock,buff,size)
 #else
     user[0] = 0X00;
 #endif
- 
+
     (void) sprintf(buff,"%s@%s",user,host);
- 
+
 /*
 (void) netline(2,"<<<<<<<<");
  */
- 
+
     return 0;
   }
- 
+
 /* include the following code only if supporting IBM OpenEdition */
 #ifdef          OECS
 #include        "aecs.h"
- 
+
 /* --------------------------------------------------------------- HTONC
  *  Host-to-Network, alpha (character)
  */
@@ -479,7 +475,7 @@ unsigned char htonc (unsigned char c)
     return c;
 #endif
   }
- 
+
 /* --------------------------------------------------------------- NTOHC
  *  Network-to-Host, alpha (character)
  */
@@ -491,7 +487,7 @@ unsigned char ntohc (unsigned char c)
     return c;
 #endif
   }
- 
+
 /* --------------------------------------------------------------- HTONZ
  *  Host-to-Network, alpha (Z-string)
  */
@@ -505,7 +501,7 @@ int htonz (unsigned char * s)
     return strlen(s);
 #endif
   }
- 
+
 /* --------------------------------------------------------------- NTOHZ
  *  Network-to-Host, alpha (Z-string)
  */
@@ -519,9 +515,9 @@ int ntohz (unsigned char * s)
     return strlen(s);
 #endif
   }
- 
+
 #endif
- 
+
 /* --------------------------------------------------------------- HTONB
  *  Host-to-Network, alpha (block)
  */
@@ -529,7 +525,7 @@ int htonb ( unsigned char * p, unsigned char * q, size_t l )
   {
     unsigned char v;
     int         i, j;
- 
+
     v = 0x00;
     j = 0;
     for (i = 0; i < l; i++)
@@ -550,7 +546,7 @@ int htonb ( unsigned char * p, unsigned char * q, size_t l )
       }
     return j;
   }
- 
+
 /* --------------------------------------------------------------- NTOHB
  *  Network-to-Host, alpha (block)
  */
@@ -558,7 +554,7 @@ int ntohb ( unsigned char * p, unsigned char * q, size_t l )
   {
     unsigned char v;
     int         i, j;
- 
+
     v = 0x00;
     j = 0;
     for (i = 0; i < l; i++)
@@ -573,5 +569,5 @@ int ntohb ( unsigned char * p, unsigned char * q, size_t l )
       }
     return j;
   }
- 
- 
+
+

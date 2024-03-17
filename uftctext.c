@@ -8,25 +8,27 @@
  *	  Date: 1995-Apr-13
  *
  */
- 
+
+#include <unistd.h>
+
 #include	"uft.h"
- 
+#include        "tcpio.h"
+
 /* ------------------------------------------------------------ UFTCTEXT
  */
-int uftctext(s,b,l)
-  int s; char *b; int l;
+int uftctext(int s,char*b,int l)
   {
     char	t[BUFSIZ] /* , *p */ ;
     int 	i, j, k;
- 
+
     k = l / 2;
     if (k > BUFSIZ) k = BUFSIZ;
- 
+
     j = read(s,t,k);
     if (j < 1)
     j = read(s,t,k);
     if (j < 0) return i;
- 
+
 /*  OLD CODE  **
     p = t;
     for (i = 0; i < j; i++)
@@ -40,8 +42,8 @@ int uftctext(s,b,l)
       }
  */
     j = htonb(b,t,j);
- 
+
     return j;
   }
- 
- 
+
+
