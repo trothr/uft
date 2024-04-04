@@ -1,109 +1,109 @@
 /* © Copyright 1995, 2005, Richard M. Troth, all rights reserved.
  *                                                           <plaintext>
  *
- *	  Name: uft.h
- *		Unsolicited File Transfer general C code header
- *	Author: Richard Troth, Houston, Texas, USA
- *	  Date: 1995-Jan-15, 2005-Jun-05
+ *        Name: uft.h
+ *              Unsolicited File Transfer general C code header
+ *      Author: Richard Troth, Houston, Texas, USA
+ *        Date: 1995-Jan-15, 2005-Jun-05
  */
 
-#ifndef 	_UFT_HEADER_
+#ifndef         _UFT_HEADER_
 
 #include "tcpio.h"
 
 #define         UFT_ANONYMOUS
 
 /*  the version number and copyright  */
-#define 	UFT_PROTOCOL	"UFT/1"
-#define 	UFT_VERSION	"POSIXUFT/1.10.2"
-#define 	UFT_COPYRIGHT	"© Copyright 1995, 2024 Richard M. Troth"
-#define 	UFT_VRM 	"1.10.2"
+#define         UFT_PROTOCOL    "UFT/1"
+#define         UFT_VERSION     "POSIXUFT/1.10.3"
+#define         UFT_COPYRIGHT   "© Copyright 1995, 2024 Richard M. Troth"
+#define         UFT_VRM         "1.10.3"
 
 /*  server constants  */
 /*  the SPOOLDIR has a sub-directory for each recipient  */
-#ifndef 	UFT_SPOOLDIR
-#define 	UFT_SPOOLDIR	"/var/spool/uft"
+#ifndef         UFT_SPOOLDIR
+#define         UFT_SPOOLDIR    "/var/spool/uft"
 #endif
 
-#ifndef 	UFT_GID
-#define 	UFT_GID 	0
+#ifndef         UFT_GID
+#define         UFT_GID         0
 #endif
 
-#ifndef 	UFT_PIPESDIR
-#define 	UFT_PIPESDIR	"/usr/lib/uft"
+#ifndef         UFT_PIPESDIR
+#define         UFT_PIPESDIR    "/usr/lib/uft"
 #endif
 
 /*  the SEQuence file name may be platform dependent  */
-#define 	UFT_SEQFILE		".seq"
-#define 	UFT_SEQFILE_ALT 	"seqno"
+#define         UFT_SEQFILE             ".seq"
+#define         UFT_SEQFILE_ALT         "seqno"
 
 /*  file name extensions  */
-#define 	UFT_EXT_CONTROL 	".cf"	/*  control , metadata  */
-#define 	UFT_EXT_DATA		".df"	/*  data  */
-#define 	UFT_EXT_EXTRA		".ef"	/*  auxdata , resource  */
-#define 	UFT_EXT_LIST		".lf"	/*  'ls -l' format  */
-#define 	UFT_EXT_WORK		".wf"
+#define         UFT_EXT_CONTROL         ".cf"/*  control , metadata  */
+#define         UFT_EXT_DATA            ".df"/*  data  */
+#define         UFT_EXT_EXTRA           ".ef"/*  auxdata , resource  */
+#define         UFT_EXT_LIST            ".lf"/*  'ls -l' format  */
+#define         UFT_EXT_WORK            ".wf"
 
 /*  client constants  */
 /*  flag bits  */
-#define 	UFT_BINARY	0x8000
-#define 	UFT_VERBOSE	0x4000
+#define         UFT_BINARY      0x8000
+#define         UFT_VERBOSE     0x4000
 
 /*  registered port for this service  */
-#define 	UFT_PORT	608
-#define 	IDENT_PORT	113
+#define         UFT_PORT        608
+#define         IDENT_PORT      113
 
-#ifndef 	BUFSIZ
-#define 	BUFSIZ		64512
+#ifndef         BUFSIZ
+#define         BUFSIZ          64512
 #endif
 
-#ifndef 	NULL
-#define 	NULL		0x0000
+#ifndef         NULL
+#define         NULL            0x0000
 #endif
 
-#define 	UFT_SYSLOG_FACILITY	LOG_UUCP
+#define         UFT_SYSLOG_FACILITY     LOG_UUCP
 
-struct		UFTFILE
-			{
-		/*  to-and-from spool space  */
-		int	cfd;	/*  control file descriptor  */
-		int	dfd;	/*  data file descriptor  */
-		int	efd;	/*  ext attr file descriptor  */
-		int	lfd;	/*  log file descriptor  */
-		/*  client-server interaction  */
-		int	sfd;	/*  server stream  */
-		int	rfd;	/*  response stream  */
-		/*  (daemon uses both sets of fds)  */
-		char	*cfn;	/*  control file path  */
-		char	*dfn;	/*  data file path  */
-		char	*efn;	/*  ext attr file path  */
-		char	*lfn;	/*  log file path  */
+struct          UFTFILE
+                        {
+                /*  to-and-from spool space  */
+                int     cfd;    /*  control file descriptor  */
+                int     dfd;    /*  data file descriptor  */
+                int     efd;    /*  ext attr file descriptor  */
+                int     lfd;    /*  log file descriptor  */
+                /*  client-server interaction  */
+                int     sfd;    /*  server stream  */
+                int     rfd;    /*  response stream  */
+                /*  (daemon uses both sets of fds)  */
+                char    *cfn;   /*  control file path  */
+                char    *dfn;   /*  data file path  */
+                char    *efn;   /*  ext attr file path  */
+                char    *lfn;   /*  log file path  */
 
-		char	from[64],
-			name[64],
-			type[8],
-			cc[8],
-			hold[8],
-			class[8],
-			devtype[8], keep[4], msg[4],
-			form[16], dist[16], dest[16];
-		int	size, copies;
-		char	title[64];
-			} ;
+                char    from[64],
+                        name[64],
+                        type[8],
+                        cc[8],
+                        hold[8],
+                        class[8],
+                        devtype[8], keep[4], msg[4],
+                        form[16], dist[16], dest[16];
+                int     size, copies;
+                char    title[64];
+                        } ;
 
-#define 	UFT_B64_CODE	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+#define         UFT_B64_CODE    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 /*  RDR FILE >this< SENT FROM $from RDR WAS yadda yadda  */
-#define 	UFT_TYPE_A_EXPANSION	/* "ASCII" */ "TXT"
-#define 	UFT_TYPE_B_EXPANSION	"BIN"
-#define 	UFT_TYPE_C_EXPANSION	"PRT"
-#define 	UFT_TYPE_I_EXPANSION	/* "IMAGE" */ "BIN"
-#define 	UFT_TYPE_M_EXPANSION	"MAIL"
-#define 	UFT_TYPE_N_EXPANSION	"NETDATA"
-#define 	UFT_TYPE_P_EXPANSION	"PRT"
-#define 	UFT_TYPE_T_EXPANSION	"TXT"
-#define 	UFT_TYPE_U_EXPANSION	/* "UNSPEC" */ "BIN"
-#define 	UFT_TYPE_V_EXPANSION	"VAR"	/*  or  "V16"  */
+#define         UFT_TYPE_A_EXPANSION    /* "ASCII" */ "TXT"
+#define         UFT_TYPE_B_EXPANSION    "BIN"
+#define         UFT_TYPE_C_EXPANSION    "PRT"
+#define         UFT_TYPE_I_EXPANSION    /* "IMAGE" */ "BIN"
+#define         UFT_TYPE_M_EXPANSION    "MAIL"
+#define         UFT_TYPE_N_EXPANSION    "NETDATA"
+#define         UFT_TYPE_P_EXPANSION    "PRT"
+#define         UFT_TYPE_T_EXPANSION    "TXT"
+#define         UFT_TYPE_U_EXPANSION    /* "UNSPEC" */ "BIN"
+#define         UFT_TYPE_V_EXPANSION    "VAR"/*  or  "V16"  */
 /*
 RDR FILE $FILE SENT FROM $RSCS RDR WAS #### ####
 xxx FILE nnnn  SEND FROM u@h
@@ -113,23 +113,23 @@ static char *uft_copyright = UFT_COPYRIGHT;
 
 
 /* © Copyright 1996, Richard M. Troth, all rights reserved.  <plaintext>
- *		(casita sourced)
+ *              (casita sourced)
  *
- *	  Name: msghndlr.h
- *		header file for  msgd.c  and  msgcat.c
- *	Author: Rick Troth, Houston, Texas, USA
- *	  Date: 1994-Jul-26, 1996-Mar-24
+ *        Name: msghndlr.h
+ *              header file for  msgd.c  and  msgcat.c
+ *      Author: Rick Troth, Houston, Texas, USA
+ *        Date: 1994-Jul-26, 1996-Mar-24
  */
 
 /*  flags  */
-#define 	MSG_IDENT		0x0001
-#define 	MSG_VERBOSE		0x0002
+#define         MSG_IDENT               0x0001
+#define         MSG_VERBOSE             0x0002
 
-#define 	MSG_MSP_HOST		"localhost"
-#define 	MSG_MSP_PORT		18
+#define         MSG_MSP_HOST            "localhost"
+#define         MSG_MSP_PORT            18
 
-#define 	MSG_UFT_HOST		"localhost"
-#define 	MSG_UFT_PORT		608
+#define         MSG_UFT_HOST            "localhost"
+#define         MSG_UFT_PORT            608
 
 
 
@@ -151,21 +151,21 @@ struct uft_stat {
     /* ... */
 
     char        uft_type,       /* UFT type (A, I, so on) */
-		name[64],
-		from[64],
+                name[64],
+                from[64],
 
                 uft_class,      /* "spool class" letter */
-		uft_hold,
+                uft_hold,
 
-		cc[8],
-		devtype[8],
-		keep[4],
-		msg[4],
+                cc[8],
+                devtype[8],
+                keep[4],
+                msg[4],
 
-		form[16],
-		dist[16],
-		dest[16],
-		title[64];
+                form[16],
+                dist[16],
+                dest[16],
+                title[64];
 
 };
 
@@ -240,7 +240,7 @@ char*uftcprot(mode_t);
 
 int abbrev(char*,char*,int);
 
-#define 	_UFT_HEADER_
+#define         _UFT_HEADER_
 #endif
 
 
