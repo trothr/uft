@@ -34,60 +34,54 @@ Do While opts ^= ""
         End  /*  Select  op  */
     End  /*  Do  While  */
 
-If  fm  =  '-'  Then  Do
-    /*  file is a pipeline  */
-    size = 0;   f = 'V';    l = 0;      r = 0;      b = 0
+If fm = '-' Then Do
+    /* file is a pipeline */
+    size = 0; f = 'V'; l = 0; r = 0; b = 0
     Parse Value Diag(08,'QUERY TIME') ,
         With . . time tz . date . '15'x .
-    End  /*  If  ..  Do  */
+End /* If .. Do */
 
 Else Do
-    /*  file is disk resident;  discover some characteristics  */
+    /* file is disk resident thtn discover some characteristics */
     'CALLPIPE CMS LISTFILE' fn ft fm '(DATE | VAR RS | DROP | VAR LS'
-    If rc ^= 0 Then Do
-        Say rs
-        Exit rc
-        End  /*  If  ..  Do  */
+    If rc ^= 0 Then Do ; Say rs ; Exit rc ; End
     Parse Var ls fn ft fm f l r b date time .
     fm = Left(fm,1)
     'CALLPIPE COMMAND QUERY DISK' fm '| DROP | VAR QD'
     Parse Var qd . 8 . . . . . bs .
-    /*  If Datatype(bs,'N') & Datatype(b,'N') Then  */
-    Select  /*  bs  */
-        When bs = 4096 Then size = b * 4 || "K"
-        When bs = 2048 Then size = b * 2 || "K"
-        When bs = 1024 Then size = b || "K"
-        Otherwise             size = b * bs
-        End  /*  Select  bs  */
+    If Datatype(bs,'N') & Datatype(b,'N') Then size = b * bs
     tz = ""
-    End  /*  Else  Do  */
+End /* Else Do */
 
-Parse Var date mm '/' dd '/' yy
-If Datatype(yy,'N') Then ,
-    If yy < 100 Then yy = yy + 1900
-date = yy || '.' || mm || '.' || dd
+If Index(date,"/") > 0 Then Do
+    Parse Var date mm '/' dd '/' yy
+    If Datatype(yy,'N') Then If yy < 100 Then yy = yy + 1900
+    If yy < 1960 Then yy = yy + 100
+    date = yy || '-' || mm || '-' || dd
+End /* If .. Do */
 
 'CALLPIPE CP QUERY USERID | XLATE LOWER | VAR FROM'
 Parse Var from from .
 'OUTPUT' "FILE" size from
 /* 'OUTPUT' "USER" user */
 
-Select  /*  type  */
-    When    type = '*'              Then  Do
-        If  Index(host,'.') = 0   Then  type = 'N'
-                                  Else  type = 'A'
+Select /* type */
+    When type = '*'              Then Do
+        /* dotted hostname implies non-IBM target */
+        If Index(host,'.') = 0 Then type = 'N'
+                               Else type = 'A'
         c = ""
-        End  /*  When  ..  Do  */
-    When  Abbrev("CC",type,1)       Then  Do
-        type = 'A';     c = 'C'
-        End  /*  When  ..  Do  */
-    When  Abbrev("RECORD",type,1)   Then  Do
+    End /* When .. Do */
+    When Abbrev("CC",type,1)     Then Do
+        type = 'A'; c = 'C'
+    End /* When .. Do */
+    When Abbrev("RECORD",type,1) Then Do
         type = f
-        If  type = 'F'  Then  c = l
-                        Else  c = ""
-        End  /*  When  ..  Do  */
+        If type = 'F' Then c = l
+                      Else c = ""
+    End /* When .. Do */
     Otherwise  c = ""
-    End  /*  Select  type  */
+    End /* Select type */
 'OUTPUT' "TYPE" type c
 
 name = fn || '.' || ft
@@ -101,10 +95,10 @@ name = fn || '.' || ft
 /*  signal the server "here comes the file body"  */
 'OUTPUT' "DATA"
 
-/*  reformatting is handled by later stages,
-    but NETDATA processing must apply now.  */
+/* reformatting is handled by later stages,
+   but NETDATA processing must apply now. */
 If Abbrev("NETDATA",type,1) Then ,
-    'CALLPIPE UFTXINMR SEND' fn ft fm 'TO' user 'AT' host '| *:'
+     'CALLPIPE UFTXINMR SEND' fn ft fm 'TO' user 'AT' host '| *:'
 Else 'CALLPIPE <' fn ft fm '| *:'
 
 Exit rc
