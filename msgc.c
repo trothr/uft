@@ -8,10 +8,12 @@
  *
  */
 
-#include	<stdio.h>
-#include	<fcntl.h>
-#include	<errno.h>
-#include	"uft.h"
+#include <stdio.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <stdlib.h>
+
+#include "uft.h"
 
 int             uftcflag;
 
@@ -87,13 +89,13 @@ int main(argc,argv)
 	    case 'v':	(void) sprintf(msgbuf,
 				"%s: %s Internet TELL/MSP client",
 				arg0,UFT_VERSION);
-			(void) putline(2,msgbuf);
+			(void) uft_putline(2,msgbuf);
 			return 0;
 			break;
 	    default:	(void) sprintf(msgbuf,
 				"%s: invalid option %s",
 				arg0,argv[i]);
-			(void) putline(2,msgbuf);
+			(void) uft_putline(2,msgbuf);
 			return 20;
 			break;
 	  }

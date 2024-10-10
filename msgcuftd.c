@@ -17,8 +17,7 @@
  *  That's UFTD, not just UFT, because messaging isn't part of
  *  UFT protocol, but may be a feature of some UFTD servers.
  */
-int msgcuftd(user,text)
-  char   *user, *text;
+int msgcuftd(char*user,char*text)
   {
     char	temp[256], ubuf[64], *host;
     int 	port, rc, s;

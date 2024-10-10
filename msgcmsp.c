@@ -8,17 +8,17 @@
  *
  */
 
-#include	<stdio.h>
-#include	<errno.h>
-#include	"uft.h"
+#include <stdio.h>
+#include <errno.h>
+
+#include "uft.h"
 
 /* -------------------------------------------------------------- MSGMSP
  *  Try to send the message via MSP.   See RFC 1312.
  *  This method should work even if the user is local,
  *  but requires an MSP server to be running (psbly under 'inetd').
  */
-int msgcmsp(user,text)
-  char   *user, *text;
+int msgcmsp(char*user,char*text)
   {
     char       *host, temp[256], *p, *q, buffer[BUFSIZ];
     int 	s, port;

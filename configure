@@ -1,5 +1,4 @@
 #!/bin/sh
-# © Copyright 1997, Richard M. Troth, all rights reserved.   <plaintext>
 #
 #         Name: configure (shell script)
 #               set-up 'sendfile' (UFT) source directory for [re]making
@@ -24,21 +23,21 @@ UNAME=`uname`
 echo "$Z: setting up 'sendfile' for $UNAME ..."
 
 while [ "$1" != "" ] ; do
-        case "$1" in
-                --prefix=*|--prefi=*|--pref=*)
-                        PREFIX=`echo "$1" | awk -F'=' '{print $2}'`
-                        ;;
-                -*)
-                        echo "$0: unrecognized option '$1'"
-                        exit 24
-                        ;;
-                *)
-                        echo "$0: unrecognized argument '$1'"
-                        exit 24
-                        ;;
-                esac
-        shift
-        done
+    case "$1" in
+        --prefix=*|--prefi=*|--pref=*)
+            PREFIX=`echo "$1" | awk -F'=' '{print $2}'`
+            ;;
+        -*)
+            echo "$0: unrecognized option '$1'"
+            exit 24
+            ;;
+        *)
+            echo "$0: unrecognized argument '$1'"
+            exit 24
+            ;;
+        esac
+    shift
+    done
 
 if [ "$UNAME" = "VM/ESA" -o "$UNAME" = "z/VM" ]; then
         CFLAGS="-DOECS -D_OE_SOCKETS"

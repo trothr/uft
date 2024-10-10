@@ -43,12 +43,12 @@ int main(argc,argv)
 			(void) sprintf(temp,
 				"%s: %s Remote CP QUERY client",
 				arg0,UFT_VERSION);
-			(void) putline(2,temp);
+			(void) uft_putline(2,temp);
 			break;
 	    default:	(void) sprintf(temp,
 				"%s: invalid option %s",
 				arg0,argv[i]);
-			(void) putline(2,temp);
+			(void) uft_putline(2,temp);
 			return 20;
 			break;
 	  }
@@ -59,7 +59,7 @@ int main(argc,argv)
       {
 	(void) sprintf(temp,
 		"Usage: %s [-h <host>] <something>",argv[0]);
-	(void) putline(2,temp);
+	(void) uft_putline(2,temp);
 	return 24;
       }
 
@@ -73,7 +73,7 @@ int main(argc,argv)
       }
 
     /*  read and discard the herald  */
-    (void) uft_getline(s,temp,BUFSIZ);
+    (void) uft_pullline(s,temp,BUFSIZ);
 
     /*  join commandline args into CPQuery string  */
     cpqs[0] = 0x00;
@@ -91,10 +91,10 @@ int main(argc,argv)
     /*  and wait for the ACK  */
     while (1)
       {
-	(void) uft_getline(s,temp,BUFSIZ);
+	(void) uft_pullline(s,temp,BUFSIZ);
 	p = temp;  while (*p > ' ') p++;  while (*p <= ' ') p++;
-	if (temp[0] == '6') (void) putline(1,p);
-	else if (temp[0] != '2') (void) putline(2,p);
+	if (temp[0] == '6') (void) uft_putline(1,p);
+	else if (temp[0] != '2') (void) uft_putline(2,p);
 	if (temp[0] != '1' && temp[0] != '6') break;
       }
 

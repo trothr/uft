@@ -181,9 +181,11 @@ msgd:		makefile msgd.o msgdlmsg.o \
 		strip msgd
 
 tell:		makefile msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o homedir.o
+			getline.o tcpio.o userid.o putline.o aecs.o \
+			homedir.o uftcwack.o
 		$(CC) -o tell msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o homedir.o
+			getline.o tcpio.o userid.o putline.o aecs.o \
+			homedir.o uftcwack.o
 		strip tell
 
 imsg:		makefile imsg.o putline.o getline.o aecs.o

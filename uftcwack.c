@@ -7,14 +7,16 @@
  *
  */
 
-#include	<string.h>
-#include        <errno.h>
-#include	"uft.h"
+#include <string.h>
+#include <errno.h>
+
+#include "uft.h"
+
 extern	int	uftcflag;
 
 /* ------------------------------------------------------------ UFTCWACK
  */
-int uftcwack(int s,char *b,int l)
+int uftcwack(int s,char*b,int l)
   {
     int 	i;
     extern int	errno;
