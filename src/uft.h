@@ -15,9 +15,9 @@
 
 /*  the version number and copyright  */
 #define         UFT_PROTOCOL    "UFT/1"
-#define         UFT_VERSION     "POSIXUFT/1.10.4"
+#define         UFT_VERSION     "POSIXUFT/1.10.3"
 #define         UFT_COPYRIGHT   "© Copyright 1995, 2024 Richard M. Troth"
-#define         UFT_VRM         "1.10.4"
+#define         UFT_VRM         "1.10.3"
 
 /*  server constants  */
 /*  the SPOOLDIR has a sub-directory for each recipient  */
@@ -56,7 +56,6 @@
 #ifndef         BUFSIZ
 #define         BUFSIZ          64512
 #endif
-#define         UFT_MAX         4096
 
 #ifndef         NULL
 #define         NULL            0x0000
@@ -225,8 +224,6 @@ int uftopen(const char *,int,mode_t);
 int uft_getline(int,char*);
 int uft_putline(int,char*);
 int uft_readspan(int,char*,int);
-int uft_pullline(int,char*,int);            /* replaces uft_getline() */
-int uft_pushline(int,char*,int);            /* replaces uft_putline() */
 
 int uftddata(int,int,int);
 int uftdnext();
@@ -242,13 +239,6 @@ int uftctext(int,char*,int);
 char*uftcprot(mode_t);
 
 int abbrev(char*,char*,int);
-
-int msgcmsp(char*,char*);
-int msgcuftd(char*,char*);
-int msglocal(char*,char*);
-int msgdlmsg(char*,char*,char*,char*);
-
-char*homedir(char*);
 
 #define         _UFT_HEADER_
 #endif
