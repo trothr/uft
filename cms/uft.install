@@ -1,0 +1,56 @@
+ © Copyright 1994, 1995, 1996, 1997, Richard M. Troth,
+              all rights reserved.    (casita sourced)     <plaintext>
+
+  This software is available for both VM/CMS and UNIX.
+  There is also a client implementation in Tcl (Tool Command Language)
+  that runs on MS Windows and UNIX with X Windows.   The Tcl version
+  might also run on the Macintosh;  I have never tried.
+
+  UFT FILELIST groups the files into "client" and "server".
+
+Overview:
+
+Use this SENDFILE command (almost) exactly as you would the IBM
+SENDFILE command.   This version does not provide the FILELIST option
+found in the IBM version.
+
+To decide whether the file should go over BITNET (RSCS) or Internet
+(TCP/IP),  this new SENDFILE examines the target node spec.   If it is
+a dotted hostname,  the file is sent over IP (or mail),  otherwise the
+file is sent via RSCS.   If SENDFILE tries to send the file via IP,
+and the connection fails  (eg: there is no UFT server on the receiving
+end),  then SENDFILE wraps the file in MIME (Multipurpose Internet Mail
+Extensions; see RFC 1341) and sends it via mail.   (presumes that you're
+running MAILER)
+
+Installing the CMS client:
+
+Copy the files listed in the "client" section of UFT FILELIST
+to a public minidisk or SFS directory.
+
+Installing the VM UFT server:
+
+Create virtual machine UFTD.   See the example UFTD DIRECT.
+Copy the files listed in the "server" section of UFT FILELIST
+to the 191 minidisk (or SFS directory) of this virtual machine.
+Create a PROFILE EXEC that will invoke UFTD EXEC.   Ensure that
+VM TCP/IP is accessed.
+
+Modify your <profile> TCPIP,  the configuration file for your TCP/IP
+service virtual machine,  assigning TCP port 608 to UFTD and including
+UFTD in TCPIP's AUTOLOG list.   You can AUTOLOG UFTD immediately.
+You can alternatively run UFTD EXEC from your own virtual machine
+prior to the assignment of TCP port 608.
+
+UFTD wants class B privileges for DIAGD4 so that it can masquerade as
+RSCS when creating spool files.   It will run perfectly well with just
+class G user privileges.   Another option would be to add UFTD to your
+SYSTEM NETID file after RSCS.   See the example SYSTEM SNETID supplied.
+
+If you have any questions or problems,  send me e-mail.
+
+Enjoy!
+
+--
+Rick Troth, Houston, Texas, USA   <troth@casita.houston.tx.us>
+

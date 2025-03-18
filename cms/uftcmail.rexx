@@ -1,4 +1,4 @@
-/* © Copyright 1995, 1997, 2024, Richard M. Troth, all rights reserved. (casita sourced) <plaintext>
+/* © Copyright 1992-2025 Richard M. Troth, all rights reserved. <plaintext>
  *
  *        Name: UFTCMAIL REXX
  *              Pipeline stage to hand-off a SIFT job to MAILER
@@ -11,8 +11,8 @@
  *        Note: UFTCMAIL is not a user-level pipeline stage
  */
 
-version = "1.0"         /*  MIME version  */
-loadmsg = 0             /*  load/unload message repository  */
+version = "1.0"         /* MIME version, not related to UFT version */
+loadmsg = 0             /* load/unload message repository */
 
 Parse Arg host . '(' . ')' .
 If host = "" Then Do
@@ -125,7 +125,7 @@ meta.0 = i
 Select
     When type = "V" & cc = "M" Then Do
         /*  spool-to-spool (VM to VM) transfer  */
-        pipe = "BLOCK 61440 CMS | ENBASE64"
+        pipe = "BLOCK 61440 CMS | 64ENCODE"
         End  /*  When .. Do  */
     When type = "A" | type = "T" Then Do
         /*  text file; send as ASCII  */
@@ -133,23 +133,23 @@ Select
         End  /*  When .. Do  */
     When type = "E" Then Do
         /*  text file; send as EBCDIC  */
-        pipe = "BLOCK 61440 TEXTFILE | ENBASE64"
+        pipe = "BLOCK 61440 TEXTFILE | 64ENCODE"
         End  /*  When .. Do  */
     When type = "I" | type = "B" | type = "U" Then Do
         /*  binary file (unstructured octet stream)  */
-        pipe = "FBLOCK 61440 | ENBASE64"
+        pipe = "FBLOCK 61440 | 64ENCODE"
         End  /*  When .. Do  */
     When type = "N" Then Do
         /*  IBM NETDATA format  */
-        pipe = "FBLOCK 61440 | ENBASE64"
+        pipe = "FBLOCK 61440 | 64ENCODE"
         End  /*  When .. Do  */
     When type = "V" Then Do
         /*  variable-length records  */
-        pipe = "BLOCK 61440 CMS | ENBASE64"
+        pipe = "BLOCK 61440 CMS | 64ENCODE"
         End  /*  When .. Do  */
     Otherwise Do
         /*  all others, treat as binary  */
-        pipe = "FBLOCK 61440 | ENBASE64"
+        pipe = "FBLOCK 61440 | 64ENCODE"
         End  /*  Otherwise Do  */
     End  /*  Select  */
 

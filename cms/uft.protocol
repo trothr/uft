@@ -1,0 +1,344 @@
+© Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
+
+This is  uft.protocol  in plain text.
+
+
+                        UFT/2  Unsolicited File Transfer
+
+
+This document describes UFT/2 protocol,  Unsolicited File Transfer,
+or Sender-Initiated File Transfer,  popularly caled  Internet SENDFILE.
+
+To illustrate a simple one-shot file transfer:  a UFT client connects to
+a UFT server,  sends a series of commands waiting for acknowledgements,
+and closes the connection.   UFT transactions are carried out over TCP
+with the server listening on port 608.   Most of the commands will
+comprise a  "meta file"  of attributes of the real file.   The real file,
+referred to as the  "body"  or  "data file",  is sent as astream of octets.
+The octets are canonicalized from local convention on the sending side
+to an agreed format for transport and then restored to local convention
+on the receiving side  (where representation may be different than for
+the sender).
+
+        The meta file is plain text ["plain text" being defined below
+to eliminate ambiguity] which is the only common thread among all
+general purpose systems,  while the data file (the "binary object")
+is an octet stream,  carried by TCP,  and may represent a plain text
+file or any of a variety of other formats.
+
+        The SIFT protocol ...
+
+            o   automatically negotiates optimum burst size
+
+            o   supports file/metafile pair concept,
+                thus supports extensible attributes
+
+            o   can be sent via other transports than TCP, if needed
+
+            o   can transfer multiple files per session
+
+            o   does not require file size to be known prior to transfer
+
+        The FILE command:
+
+                FILE  size  from  auth
+
+            size    approximate size of the file in bytes
+
+            from    the login name of the sender
+
+            auth    an authentication token  (usually
+                    IDENT, perhaps a dash "-" indicating
+                    an unauthenticated sender, or some other
+                    yet-to-be-invented method)
+
+        The USER command:
+
+                USER  user
+
+            user    the login name of the intended recipient
+                    or the equivalent ID of a service robot
+
+        The TYPE command:
+
+                TYPE  type
+
+            type    the transfer representation type:  A, I, V, ...
+
+        UFT's TYPE value could conceivably be replaced with a MIME
+Content Type  value, except that  Content Type  doesn't always clearly
+address canonicalization,  which is essential to interoperability.
+
+        The NAME command:
+
+                NAME  filename
+
+        The DATE command:
+
+                DATE  yyyy/mm/dd hh:mm:ss tz
+
+        Other optional commands:
+
+                CHARSET
+                RECORD_FORMAT
+                RECFMT
+                RECORD_LENGTH
+                RECLEN
+                CLASS
+                FORM
+                DESTINATION
+                FCB
+                DISTRIBUTION
+
+        The DATA command
+
+                DATA  burst-size
+
+            burst-size      exact size of this burst of data
+
+
+
+        The attributes defined are:
+
+        Essential types are:
+
+                A       ASCII (plain text; CR/LF delimited lines)
+                I       "image" (binary)
+                V       "variable" (record oriented)
+
+        Other types are:
+
+                B       "binary"; alias for I (image)
+                E       EBCDIC (plain text; NL (15); pad blank (40))
+                F       fixed-length records (sent as binary)
+
+                N       NETDATA (proprietary, but common)
+                M       mail (in ASCII plain text form)
+
+                T       "text";         explicit alias for ASCII
+                U       "unformatted";  explicit alias for "binary"
+                V       variable-length records (16-bit length field)
+                W       wide var-length records (32-bit length field)
+                X       extra-wide var-length records (64-bit length)
+
+        TYPE M indicates that SIFT/UFT can be used to carry e-mail.
+But,  SIFT itself can be carried *by* e-mail.   It is possible for SIFT
+to be carried on top of mail which is carried over SIFT,  or for mail
+to be carried by SIFT over mail.   Things could obviously get out of hand,
+but a pure implementation must allow for such combinations.
+
+
+        Loose Definition of "plain text":  plain text looks the same
+to the machine as it does to you and me.   That is,  if some program
+is to process a plain text file,  then it is interpreted the same by
+the program as it would be by a human reader.   There are no "gotchas"
+from non-printables or <TAB> -vs- <SPACE>.   White space is white space
+and trailing blanks are not significant.   In general,  control characters
+are not allowed.
+
+        Thanks to the following people for significant help with SIFT/UFT:
+David Lippke, Bill Manning, Eric Thomas, John Klensin, Valdis Kletnieks,
+Arty Ecock, Kevin Mullet, Bill Hunter, Rob van der Heij,  and others
+about whom I'll be embarrassed to have left out.
+
+        What's the difference between UFT and SIFT?   When UFT operates
+"on the wire"  (that is,  over TCP/IP)  it is referred to as just UFT.
+When the same transaction is carried over "mail",  it may be called SIFT.
+Otherwise,  they are the same.   In fact,  a major goal of implementors
+is that it be directly translatable between the two modes.
+
+Commands are acknowledged by a response starting with a "2".
+Commands are rejected by a response starting with either a "4" or a "5".
+The digit "1" indicates a response that is informational,  not final.
+The digit "3" indicates a response that requests more information.
+The digit "6" is for a response that is not final,  but carries
+information explicitly requested by the client.   A response from the
+server (receiver) to the client (sender) looks something like
+
+        nnn message
+
+where nnn is a unique three digit number starting with one of the above,
+1, 2, 3, 4, 5, or 6.   All other leading digits and letters are reserved,
+other characters (punctuation, etc) being in error.
+
+        100 spontaneous server response, "info"
+        200 simple ACK
+        300 more requried (more required from client)
+        400 simple NAK (client error or temporary error)
+        500 simple NAK (server error or pernanent error)
+        600 required server response
+
+In UFT/2,  the server sends a 2xx "herald" immediately upon accepting
+the connection from the client.   A UFT/1 the server sends a 1xx herald.
+
+
+        If you have any questions or problems,  send me e-mail.
+
+        Enjoy!
+
+--
+Rick Troth, Houston, Texas   <troth@casita.houston.tx.us>
+
+
+
+© Copyright 1995, Richard M. Troth, all rights reserved.     <plaintext>
+  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT
+  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT
+  Here follows some thoughts on UFT/2:
+
+
+                        UFT/2  Unsolicited File Transfer
+
+
+At least two canonicalizations should be supported:
+
+        A       ASCII with CR/LF at the end of each line
+
+        I       "image" or binary
+
+Implementations may support additional canonicalizations.
+
+
+AGENT  challenge  [response]
+
+    challenge
+            what the receiver should send back to the sender
+            for verification
+
+    response
+            what the receiver should get from verification
+
+        If the AGENT command is sent,  it must come before any
+        FILE or PIPE command.    (HOST needs to be in there!)
+
+        One problem with AGENT is that it presumes TCP or some other
+        socket oriented transport.   But UFT might be carried by
+        store-and-forward or other methods.
+
+
+FILE  size  from  auth
+
+    size
+            approximate size of the file in bytes
+
+    from
+            the login name of the sender
+
+    auth
+            an authentication token,  typically  IDENT or AGENT
+
+        A FILE excludes a PIPE command and must preceed all other
+        commands until EOF
+
+        (mentioning this here for comparison w/ PIPE)
+
+        IDENT doesn't work in a gatewayed TCP environment
+        unless the IDENT protocol is also gatewayed.
+
+
+PIPE  name  from  auth
+
+    name
+            the name of the queue to be fed this data stream
+
+    from
+            the login name of the sender
+
+    auth
+            an authentication token,  typically  IDENT or AGENT
+
+        A PIPE excludes a FILE command and must preceed all other
+        commands until EOF
+
+        IDENT doesn't work in a gatewayed TCP environment
+        unless the IDENT protocol is also gatewayed.
+
+
+UDATE   date  [offset]
+
+        date
+                the timestamp on the file as number of seconds
+                since Jan 1, 1970
+
+        offset
+                the number of seconds away from GMT for local timezone
+
+DATA  size
+
+    size
+            the number of octets of binary data about to be sent
+            The server will read exactly this number of octets,
+            append them to the file,  then wait for another command.
+
+        In UFT/2,  a positive response to a DATA command is a 3xx code
+        as if to say  "okay to send"  followed by a 2xx code upon
+        receipt of all octets.   In UFT/1,  a positive response to a
+        DATA command is a 2xx code for which placement was vague.
+        In UFT/0 (obsolete),  the size attribute was optional
+        allowing for unclear EOF as the server would read octets
+        until the TCP connection was closed.
+
+        (mentioning this here to discuss the new response code 3xx)
+
+AUXDATA  size
+
+    size
+            the number of octets of binary data about to be sent
+            The server will read exactly this number of octets,
+            append them to an auxiliary fork or extended attributes,
+            then wait for another command.   Response codes for
+            AUXDATA are the same as for DATA.
+
+MSG   user  message ...
+
+        user
+                the user to receive this interactive message
+
+        message ...
+                whatever the client wanted to send
+
+        Note that authentication may or may not have been arranged.
+        The AGENT command mentiond here is one method of handling
+        authentication outside of the context of sending a file.
+
+        The VM server has supported this command for quite a long time.
+        Neither the VM client,  nor the UNIX client or server
+        presently support it.   Also,  the VM server handles MSG
+        as a collision between the function mentioned here and
+        the MSG attribute applied to some VM spool files.
+
+
+  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT
+  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT  DRAFT
+
+
+
+
+
+
+
+
+FILE  size  from  auth
+PIPE  size  from  auth
+USER  user
+TYPE  type
+QUIT
+
+DATA  burst
+AUXDATA  burst
+METADATA  metadata
+LINES  lines
+BYTES  bytes
+EOF
+
+NAME
+DATE
+CLASS
+LRECL
+RECFM
+FMODE
+FORMS
+OWNER
+GROUP
+XPERM  U:, G:, O:, S:, R, W, X, D
+

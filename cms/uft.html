@@ -1,0 +1,269 @@
+© Copyright 1995, Richard M. Troth, all rights reserved.     <plaintext>
+
+This is UFT README in plain text.
+
+        Tagging objects is an increasingly popular method of
+representing data.   Given the reliable transport offered by TCP
+and an open-ended tagging method,  we can transfer any static object
+(file) with any arbitrary set of attributes from system to system,
+even between otherwise incompatible platforms.   This concept is a
+funcional superset of the file transfer capability of NJE networking
+as found on familiar networks like BITNET.   Operation is inverse to
+World Wide Web in that files are sent rather than fetched.
+
+        SIFT/UFT combines an open-ended tagging of binary objects
+on top of TCP resulting in a general purpose file transfer mechanism.
+A plain text meta file is created by the sending user agent
+and accompanies the binary object along a TCP path to the target
+recipient host.   SIFT transfer agents can (and in general should)
+leave both the file and meta file intact,  allowing that the object
+defined may be gatewayed if needed and that the final disposition
+rest with the receiving entity.
+
+        The meta file is plain text ["plain text" being defined below
+to eliminate ambiguity] which is the only common thread among all
+general purpose systems,  while the data file (the "binary object")
+is an octet stream,  carried by TCP,  and may represent a plain text
+file or any of a variety of other formats.
+
+        The attributes defined are:
+
+                TYPE    (types listed below)
+                NAME
+                DATE
+
+                CHARSET
+                RECORD_FORMAT
+                RECORD_LENGTH
+                CLASS
+                FORM
+                DESTINATION
+                FCB
+                DISTRIBUTION
+
+        Types are:      (to be replaced with MIME-style types)
+
+                A       ASCII (plain text; CR/LF; pad blank (20))
+                B       "binary"; alias for "image"
+                E       EBCDIC (plain text; NL (15); pad blank (40))
+
+                F       fixed-length records
+
+                N       NETDATA (proprietary, but common)
+                M       mail (in ASCII plain text form)
+
+                R       record; relies on TCP message boundaries
+
+                I       "image";        explicit alias for "binary"
+
+                T       "text";         explicit alias for ASCII
+                U       "unformatted";  explicit alias for "binary"
+                V       variable-length records (16-bit length field)
+                W       wide var-length records (32-bit length field)
+                X       extra-wide var-length records (64-bit length)
+                Y       (reserved)
+
+                L       (reserved)
+
+
+
+        The SIFT protocol provides the following:
+
+        o       automatically negotiates optimum burst size
+
+        o       supports file/metafile pair concept,
+                thus supports extensible attributes
+
+        o       can feed a mail based transport agent
+                when TCP is not available
+
+        o       can transfer multiple files per session
+                (not concurrently, though concurrency is possible)
+
+        o       does not require file size to be known prior to transfer
+
+
+
+        TYPE M indicates that SIFT/UFT can be used to carry
+electronic mail.   As we said before,  though,  SIFT itself
+can be carried *by* electronic mail.   This can get interesting.
+Note that it is possible for SIFT to be carried on top of mail
+carried over SIFT,  or for mail to be carried by SIFT over mail.
+Things could obviously get out of hand,  though it is arguable that
+a pure implementation must allow for such combinations.
+
+Loose Definition of "plain text":
+
+        Plain text looks the same to the machine as it does to you.
+That is,  if some program is to process a plain text file,  then
+it is interpreted the same by the program as it would be by a human.
+There are no "gotchas" from non-printables or <TAB> -vs- <SPACE>.
+White space is white space and trailing blanks are not significant.
+In general,  control characters are not allowed.
+
+
+Thanks to the following people for significant help with SIFT/UFT:
+David Lippke, Bill Manning, Eric Thomas, John Klensin, Valdis Kletnieks,
+Arty Ecock, and others about whom I'll be embarrassed to have left out.
+
+
+Rough overview of the protocol:
+
+        FILE  size  from  auth
+
+            size    approximate size of the file in bytes
+
+            from    the login name of the sender
+
+            auth    an authentication token
+
+        USER  user
+
+            user    the login name of the intended recipient
+                    or the equivalent ID of a service robot
+
+        TYPE  type
+
+            type    the transfer representation type:  A, I, N, ...
+
+        ... other optional commands ...
+        NAME  filename
+        DATE  yyyy.mm.dd hh/mm/ss tz
+        ... other optional commands ...
+
+        DATA  burst-size
+
+            burst-size      exact size of this burst of data
+
+        [binary data]
+        DATA  burst-size
+        [more binary data]
+        DATA  burst-size
+        [still more binary data]
+        ...
+
+        EOF
+
+        QUIT
+
+
+        What's the difference between UFT and SIFT?   When UFT operates
+"on the wire"  (that is,  over TCP/IP)  it is referred to as just UFT.
+When the same transaction is carried over "mail",  it may be called SIFT.
+Otherwise,  they are the same.   In fact,  a major goal of implementors
+is that it be directly translatable between the two modes.
+
+        If you have any questions or problems,  send me e-mail.
+
+        Enjoy!
+
+--
+Rick Troth, Houston, Texas   <rmtroth@compassnet.com>
+
+Date:       Thu, 2 Feb 1995 08:33:42 +0000
+From:       Rick Troth <troth@rice.edu>
+Subject:    Re: UFT
+
+> Is there a man page?  At this point I don't even know what "UFT"
+> stands for, let alone how to send any files with it.
+
+        UFT = Unsolicited File Transfer  (where "unsolicited"
+does NOT mean unwanted,  just that you didn't go get it,  it came
+to you)  It's complimentary to WWW.   Where WWW is anonymous get,
+UFT is anonymous put.   (SIFT = Sender-Initiated File Transfer
+and is the same thing,  which I think you've heard of before;
+SIFT usually refers to mail transport while UFT suggests TCP,
+but they're otherwise identical)
+
+        I thought I had sent you a description of the .cf and .df
+files.   That could be in a backlog somewhere.   The .cf file is a
+"control file" that has the "meta data" attributes of the file in
+'env' form.   The .cf file is the octet stream of the real file.
+
+        No.   There's no man page.   There's a short description
+in the README in the package  (in /usr/site/uft on Chico).   I think
+the VM version leaves the help file to IBM,  because CMS already has
+a SENDFILE command and the UFT version is intended to be syntactically
+equivalent.
+
+> Maybe in addition
+> to a man page you could set up a *web* page about it.
+
+        THAT's a GREAT idea.   I'm surprised that I didn't think of it.
+
+        I can't put Rice time into this.   You can find the package
+at  http://risc.ua.edu/~troth/software/posixuft.tar.   I think you
+already know of my UA1VM.ua.edu account;  RISC is their AIX box.
+
+        I just felt the need for an HTML "imbed" tag.   There's a
+two-or-so-page conceptual overview in  /usr/site/uft/../uft.readme.
+I'd like to imbed an HTML-ified version of that at the start of a
+UFT web page,  and then put the POSIX (UNIX) specific stuff after.
+Meantime,  you can read that (/usr/site/uft/../uft.readme) if you
+are so inclined and have the time.   (I really don't want this to
+suck up a lot of your time either,  though I'm personally thrilled
+if you find it worth the investment)
+
+> -- Prentiss
+
+--
+Rick Troth <troth@rice.edu>, Rice University, Information Systems
+
+
+Date:       Fri, 20 Jan 1995 10:31:58 -0600 (CST)
+From:       Rick Troth <troth@rice.edu>
+Subject:    POSIXUFT/1.2.0
+
+        It lives!   Hallelujah!
+
+        Over the past couple of weeks I've been hacking on
+Internet SENDFILE while riding the bus and in the wee hours at home.
+Previously,  we had a sender (client) and receiver (server) for VM
+and a sender (client) for UNIX.   Now there's a receiver (server)
+for UNIX too.   This is neat.
+
+        Prentiss recently needed to automate some *large* transfers
+from RICEVM1 to Chico (ftp.rice.edu) and has accomplished that with
+FTP and some slick coding by Ben and Chris.   Fine.   I'd like to
+suggest that y'all think about looking into using UFT.   UFT can
+safely use sym-links from its spooling directory,  so the existing
+~ftp/incoming directory can be used for user "ftp".   There's a
+lot of flexibility here.   UFT offers generic object queueing.
+
+        Glenn has put some time into a nifty MIME sender that's
+mail-only.   My olde UNIX client would fall-back to mail if it
+failed to find a UFT server on the target host.   So mail is
+always an option.   But for Prentiss' current need mail was
+not usable because of the size of the files being sent.   So I feel
+really good about the  "try TCP first, then try mail"  approach.
+
+        The server is alpha.   Some clean-up is necessary before I
+mention it on  sift-l  or  uft-l.   But it runs great on Linux and
+should be a drop-in on SunOS  (I used Sun man pages for all
+system call references I needed to look up).
+
+        Each inbound UFT "object" (file) has two physical files:
+nnnn.cf and nnnn.df.   The .cf is a "control file" or a "metafile"
+while the .df is the "data file" and is the real file being sent.
+The control file holds environment variables and is suitable for
+sourcing by a shell script.   Most interesting variables are NAME
+and TYPE,  NAME being obvious and TYPE being either an FTP-ish
+canonicalization type  (typically A for ASCII or I for "image")
+or (better) a MIME-ish media type,  like  text/plain.
+
+        So ... /usr/spool/uft/riddle would hold Prentiss' stuff.
+The quickest way to get the oldest unreceived item would be to 'rcv',
+where 'rcv' is a shell script that "does the right thing".   Of course
+one can always manually operate on  /usr/spool/uft/riddle/0001.df
+according to what's in  /usr/spool/uft/riddle/0001.cf.   The number
+0001 goes up so that the next item would be 0002, 0003, and so on.
+Leading zeros are kept in the filename so sorting works.   Another
+script, 'rls' lists the files in queue to be received.
+
+--
+Rick Troth <troth@rice.edu>, Rice University, Information Systems
+http://is.rice.edu/~troth/
+
+
+
+

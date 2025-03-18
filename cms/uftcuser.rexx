@@ -1,10 +1,12 @@
-/*
+/* © Copyright 1993-2025 Richard M. Troth, all rights reserved. <plaintext>
+ *
  *        Name: UFTCUSER REXX
  *              inserts USER record in the SIFT job
  *              Sender-Initiated File Transfer
  *      Author: Rick Troth, Rice University, Information Systems
  *              Rick Troth, Houston, TX (METRO)
  *        Date: 1993-Feb-20, Oct-20
+ *              2025-02-11
  *
  *        Note: UFTCUSER is not a user-level pipeline stage.
  */

@@ -6,6 +6,9 @@ Here, "unsolicited" does not mean "unwanted"
 but rather that the recipient did not fetch the file
 and the sender might not have sign-on credentials on the target host.
 
+A better expansion of the acronym might be <br/>
+Universal File Transfer
+
 Note:
 This project has been moved and now lives at
 https://github.com/trothtech/uft/
@@ -54,8 +57,8 @@ Contrast with SMTP and FTP where a particular numeric response code
 can be produced for multiple conditions.
 
 "If you have three pet dogs, give them names.
-If you have 10,000 head of cattle, don't bother."
- -- David Gelernter
+If you have 10,000 head of cattle, don't bother." <br/>
+ -- David Gelernter <br/>
  -- recorded 2000-09-10, dunno when he actually said that
 
 
