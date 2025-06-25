@@ -7,7 +7,9 @@ but rather that the recipient did not fetch the file
 and the sender might not have sign-on credentials on the target host.
 
 A better expansion of the acronym might be <br/>
-Universal File Transfer
+Universal File Transfer (a name with less baggage) <br/>
+There is also the title "Sender-Initiated File Transfer" or SIFT,
+which usually refers to an offline or batch variant of the protocol.
 
 Note:
 This project has been moved and now lives at
@@ -18,7 +20,7 @@ The new repository has both POSIX and VM/CMS components.
 ## README for POSIX UFT
 
 This is the README file for POSIX UFT.
-For more information,  see the HTML files in the "doc" directory
+For more information, see the HTML files in the "doc" directory
 or find the same content on the web at ...
 
     http://www.casita.net/pub/uft/
@@ -50,8 +52,8 @@ but is explicitly included in the new home. (see above)
 
 ## Response Codes
 
-"The numbers are all wrong".   The response code numbers have been
-hastily slapped into the code and may change.   But PLEASE NOTE that
+"The numbers are all wrong". The response code numbers have been
+hastily slapped into the code and may change. But PLEASE NOTE that
 one significant aspect of UFT is that the response numbers are UNIQUE.
 Contrast with SMTP and FTP where a particular numeric response code
 can be produced for multiple conditions.
