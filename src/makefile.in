@@ -7,17 +7,17 @@
 #
 
 APPLID          =       uft
-VERSION         =       1.10.6
-DELIVERABLES    =       uftd sf rls rcv
+VERSION         =       2.0
+DELIVERABLES    =       uftd sf rls rcv uftcndd tell
 SOURCEURL       =       https://raw.githubusercontent.com/trothtech/uft/refs/heads/main
 #                       https://raw.githubusercontent.com/trothtech/uft/master
 
 ##### configuration #####
 
+PREFIX          =       %PREFIX%
 LDFLAGS         =       %LDFLAGS%
 LIBS            =       %LIBS%
 CFLAGS          =       %CFLAGS% -DPREFIX=\"$(PREFIX)\"
-PREFIX          =       %PREFIX%
 SHFLAGS         =       %SHFLAGS%
 # we may later use CC, CXX, CPP, CPPFLAGS, and/or CXXFLAGS
 
@@ -26,18 +26,17 @@ LOCALE          =       %LOCALE%
 
 .PHONY: 	clean distclean config help
 
-all:		uftd sf
-#			maketext cpq cpqu \
-#			tell msgpipe msgcat msgd
+all:		$(DELIVERABLES)
+#		maketext cpq cpqu msgpipe msgcat msgd
 
 uftd:		makefile uftd.o \
 			uftdnext.o uftddata.o uftduser.o \
-			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o \
-			getline.o putline.o abbrev.o tcpio.o aecs.o
-		$(CC) $(CFLAGS) -o uftd uftd.o \
+			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o uftdcpq.o \
+			abbrev.o tcpio.o aecs.o uftlib.o xmitmsgx.o
+		$(CC) $(LDFLAGS) -o uftd uftd.o \
 			uftdnext.o uftddata.o uftduser.o \
-			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o \
-			getline.o putline.o abbrev.o tcpio.o aecs.o $(LIBS)
+			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o uftdcpq.o \
+			abbrev.o tcpio.o aecs.o uftlib.o xmitmsgx.o $(LIBS)
 
 uftdnext.o:	makefile uft.h uftdnext.c
 		$(CC) $(CFLAGS) -c uftdnext.c
@@ -60,23 +59,23 @@ uftdlmsg.o:	makefile uft.h uftdlmsg.c
 uftdlist.o:	makefile uft.h uftdlist.c
 		$(CC) $(CFLAGS) -c uftdlist.c
 
+uftdcpq.o:	makefile uft.h uftdcpq.c
+		$(CC) $(CFLAGS) -o uftdcpq.o -c uftdcpq.c
+
 uftd.o: 	makefile uft.h uftd.c
-		$(CC) $(CFLAGS) -c uftd.c
+		$(CC) $(CFLAGS) -o uftd.o -c uftd.c
 
 sf:		makefile uftc.o \
-			uftcwack.o uftctext.o uftcprot.o \
-			tcpio.o getline.o putline.o \
-			userid.o aecs.o readspan.o abbrev.o
-		$(CC) $(CFLAGS) -o sf uftc.o \
-			uftcwack.o uftctext.o uftcprot.o \
-			tcpio.o getline.o putline.o \
-			userid.o aecs.o readspan.o abbrev.o $(LIBS)
+			uftctext.o uftcprot.o \
+			uftlib.o tcpio.o xmitmsgx.o \
+			aecs.o readspan.o abbrev.o
+		$(CC) $(LDFLAGS) -o sf uftc.o \
+			uftctext.o uftcprot.o \
+			uftlib.o tcpio.o xmitmsgx.o \
+			aecs.o readspan.o abbrev.o $(LIBS)
 
 uftc.o: 	makefile uft.h uftc.c
 		$(CC) $(CFLAGS) -c uftc.c
-
-uftcwack.o:	makefile uft.h uftcwack.c
-		$(CC) $(CFLAGS) -c uftcwack.c
 
 uftctext.o:	makefile uft.h uftctext.c
 		$(CC) $(CFLAGS) -c uftctext.c
@@ -97,32 +96,37 @@ uftcnote.h:	makefile uftcnote.txt
 uftcmime:	makefile uftcmime.c uftcnote.h
 		$(CC) $(CFLAGS) -o uftcmime uftcmime.c $(LIBS)
 
-maketext:	makefile maketext.o getline.o putline.o tcpio.o aecs.o
+uftcndd:	makefile uftcndd.c uft.h
+		$(CC) $(CFLAGS) -o uftcndd uftcndd.c $(LIBS)
+
+maketext:	makefile maketext.o tcpio.o aecs.o
 		$(CC) $(CFLAGS) -o maketext \
-			maketext.o getline.o putline.o tcpio.o aecs.o $(LIBS)
+			maketext.o tcpio.o aecs.o $(LIBS)
 
-cpq:		makefile cpq.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o
-		$(CC) $(CFLAGS) -o cpq cpq.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o $(LIBS)
+cpq:		makefile cpq.o \
+			tcpio.o aecs.o
+		$(CC) $(LDFLAGS) -o cpq cpq.o \
+			tcpio.o aecs.o $(LIBS)
 
-cpqu:		makefile cpqu.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o
-		$(CC) $(CFLAGS) -o cpqu cpqu.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o $(LIBS)
+cpqu:		makefile cpqu.o \
+			tcpio.o aecs.o
+		$(CC) $(LDFLAGS) -o cpqu cpqu.o \
+			tcpio.o aecs.o $(LIBS)
 
 clean:
 		rm -f core a.out *.o *.a *.lst CEEDUMP.* \
 			uftd sf maketext cpq cpqu uftcmime \
-			tell msgpipe msgcat msgd imsg
+			tell msgpipe msgcat msgd imsg uftcndd
+		sh -c ' cd xmitmsgx ; exec $(MAKE) clean '
 
 distclean:
 		rm -f core a.out *.o *.a *.lst CEEDUMP.* \
 			uftd sf maketext cpq cpqu uftcmime \
-			tell msgpipe msgcat msgd imsg \
+			tell msgpipe msgcat msgd imsg uftcndd \
 			*:* *';'* makefile Makefile makefile.old \
 			uft.spec configure.sh configure.h *.rpm *.log .rpmseq
 		rm -rf rpmbuild.d
+		sh -c ' cd xmitmsgx ; exec $(MAKE) distclean '
 
 #makefile:	makefile.in configure
 #		@echo "$(MAKE): makefile is out of synch"
@@ -138,20 +142,11 @@ help:
 #
 #
 
-getline.o:	makefile getline.c
-		$(CC) $(CFLAGS) -c getline.c
-
-putline.o:	makefile putline.c
-		$(CC) $(CFLAGS) -c putline.c
-
 abbrev.o:	makefile abbrev.c
 		$(CC) $(CFLAGS) -c abbrev.c
 
 tcpio.o:	makefile tcpio.c
 		$(CC) $(CFLAGS) -c tcpio.c
-
-userid.o:	makefile userid.c
-		$(CC) $(CFLAGS) -c userid.c
 
 maketext.o:	makefile maketext.c
 		$(CC) $(CFLAGS) -c maketext.c
@@ -165,9 +160,15 @@ cpqu.o:		makefile cpqu.c
 aecs.o: 	makefile aecs.c aecs.h
 		$(CC) $(CFLAGS) -c aecs.c
 
-readspan.o: 	makefile readspan.c
+readspan.o:	makefile readspan.c
 		$(CC) $(CFLAGS) -c readspan.c
 
+xmitmsgx.o:
+	sh -c ' cd xmitmsgx ; exec $(MAKE) xmitmsgx.o '
+	cp -p xmitmsgx/xmitmsgx.o .
+
+uftlib.o:	makefile uft.h uftlib.c
+		$(CC) $(CFLAGS) -o uftlib.o -c uftlib.c
 
 #
 #	  Name: makefile.in (make file source)
@@ -184,24 +185,25 @@ msgcat: 	makefile msgpipe
 		rm -f msgcat
 		ln msgpipe msgcat
 
-msgpipe:	makefile msgpipe.o putline.o
-		$(CC) -o msgpipe msgpipe.o putline.o
+msgpipe:	makefile msgpipe.o
+		$(CC) -o msgpipe msgpipe.o
 		strip msgpipe
 
 msgd:		makefile msgd.o msgdlmsg.o \
-			putline.o tcpio.o aecs.o homedir.o
+			tcpio.o aecs.o homedir.o
 		$(CC) -o msgd msgd.o msgdlmsg.o \
-			putline.o tcpio.o aecs.o homedir.o
+			tcpio.o aecs.o homedir.o
 		strip msgd
 
-tell:		makefile msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o homedir.o
-		$(CC) -o tell msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o homedir.o
-		strip tell
+tell:		makefile msgc.o uftlib.o tcpio.o xmitmsgx.o \
+		  uftctext.o uftcprot.o aecs.o readspan.o abbrev.o
+	$(CC) $(LDFLAGS) -o tell msgc.o uftlib.o tcpio.o xmitmsgx.o \
+		  uftctext.o uftcprot.o aecs.o readspan.o abbrev.o $(LIBS)
+	strip tell
+# msgcmsp.o msgcuftd.o msglocal.o homedir.o
 
-imsg:		makefile imsg.o putline.o getline.o aecs.o
-		$(CC) -o imsg imsg.o putline.o getline.o aecs.o
+imsg:		makefile imsg.o aecs.o
+		$(CC) -o imsg imsg.o aecs.o
 		strip imsg
 
 imsg.o: 	makefile uft.h imsg.c
@@ -235,15 +237,14 @@ homedir.o:	makefile homedir.c
 #		mv sf cpq cpqu tell msgcat $(PREFIX)/bin/.
 #		mv maketext msgpipe $(PREFIX)/lib/.
 #		mv uftd msgd $(PREFIX)/sbin/.
-install:	sf uftd
-		mkdir -p $(PREFIX)/bin $(PREFIX)/sbin $(PREFIX)/etc/xinetd.d \
-			$(PREFIX)/share/locale/$(LOCALE)
-		cp -p sf rls rcv $(PREFIX)/bin/.
-		cp -p uftd $(PREFIX)/sbin/.
-#		cp -p uftd $(PREFIX)/libexec/.
+install:	$(DELIVERABLES)
+		mkdir -p $(PREFIX)/bin $(PREFIX)/etc/xinetd.d \
+			$(PREFIX)/share/locale/$(LOCALE) $(PREFIX)/libexec
+		cp -p sf rls rcv uftcndd tell $(PREFIX)/bin/.
+#		cp -p uftd $(PREFIX)/sbin/.
+		cp -p uftd $(PREFIX)/libexec/.
 		cp -p uft.inet $(PREFIX)/etc/xinetd.d/uft
-#
-                cp -p uft.msgs $(PREFIX)/share/locale/$(LOCALE)/.
+		cp -p uft.msgs $(PREFIX)/share/locale/$(LOCALE)/.
 
 ########################################################################
 # RPM support
