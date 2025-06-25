@@ -24,7 +24,7 @@
  */
 
 /*  set some initial values  */
-vrm0 = "1.10.6"                 /* to coincide with the POSIX version */
+vrm0 = "2.0"                    /* to coincide with the POSIX version */
 
 /*  identify this stage  */
 Parse Source . . arg0 .
@@ -35,7 +35,7 @@ Address COMMAND 'GLOBALV SELECT' arg0 'GET HOSTID VRM VERBOSE' ,
     'REMOTE_HOST REMOTE_ADDR REMOTE_USER REMOTE_IDENT' ,
         'UFT LOCALHOST SERVER_PIPE_ATTACH'
 If vrm ^= vrm0 Then ,
-    Address COMMAND 'XMITMSG 1200 VRM0 VRM (APPLID UFT ERRMSG'
+    Address COMMAND 'XMITMSG 1200 VRM0 VRM (APPLID UFT CALLER SRV'
 If remote_host = "" Then remote_host = remote_addr
 If remote_user = "" Then remote_user = remote_ident
 
@@ -168,10 +168,14 @@ Do Forever
         Parse Upper Var line . verb .
         Parse       Var line . line
         meta = 1
-        End  /*  If .. Do  */
+    End /* If .. Do */
     code = 0
+/*
+402 Command XDATE not implemented.
+402 Command PROT not implemented.
+ */
 
-    Select  /*  verb  */
+    Select /* verb */
 
         When ^meta & verb = "" Then nop
         When ^meta & Left(verb,1) = '*' Then If verbose Then Say line
@@ -196,9 +200,16 @@ Do Forever
 
         When verb = "USER" Then Do
             Parse Upper Var line . user .
+            Parse Value _chkuser(user) With rc rs
+            If rc = 0 Then ,
             'CALLPIPE COMMAND XMITMSG 200 (APPLID UFT' ,
                 'CALLER SRV NOHEADER | *.OUTPUT:'
-            End  /*  When .. Do  */
+                      Else Do
+            'CALLPIPE COMMAND XMITMSG 553 USER (APPLID UFT' ,
+                'CALLER SRV NOHEADER | *.OUTPUT:'    /* or 532 or 550 */
+                          user = ""
+                      End /* When .. Do */
+            End /* When .. Do */
 
         When verb = "TYPE" Then Do
             Parse Upper Var line . type cc .
@@ -331,10 +342,10 @@ Do Forever
                     'CALLPIPE COMMAND XMITMSG 200 (APPLID UFT' ,
                     'CALLER SRV NOHEADER | *.OUTPUT:'
                 When rc = 45 Then ,
-                    'CALLPIPE COMMAND XMITMSG 545 (APPLID UFT' ,
+                    'CALLPIPE COMMAND XMITMSG 545 TST (APPLID UFT' ,
                     'CALLER SRV NOHEADER | *.OUTPUT:'
                 When rc = 57 Then ,
-                    'CALLPIPE COMMAND XMITMSG 557 (APPLID UFT' ,
+                    'CALLPIPE COMMAND XMITMSG 557 TST (APPLID UFT' ,
                     'CALLER SRV NOHEADER | *.OUTPUT:'
                 Otherwise ,
                     'CALLPIPE COMMAND XMITMSG 500 (APPLID UFT' ,
@@ -343,13 +354,19 @@ Do Forever
         End /* When .. Do */
 
         /* a BITNETism, because I like it */
-        When verb = "CPQ"  Then Do
+        When Abbrev("CPQUERY",verb,3) Then Do
             Parse Upper Var line . cpq
-            /* LOGMSG, USER user, USERS, NAMES, TIME, etc. */
-            'CALLPIPE VAR CPQ | SPEC /QUERY / 1 1-* NEXT' ,
-                '| CP | SPEC /199 / 1 1-* NEXT | *.OUTPUT:'
-            'CALLPIPE COMMAND XMITMSG 200 (APPLID UFT' ,
-                'CALLER SRV NOHEADER | *.OUTPUT:'
+            Parse Value _cpq(cpq) With rc rs
+            If rc = 0 Then Do
+                'CALLPIPE VAR RS | SPLIT AT x15' ,
+                    '| SPEC /699 / 1 1-* NEXT | *.OUTPUT:'
+                'CALLPIPE COMMAND XMITMSG 200 (APPLID UFT' ,
+                    'CALLER SRV NOHEADER | *.OUTPUT:'
+            End ; Else Do
+                Parse Var cpq cpq .
+                'CALLPIPE COMMAND XMITMSG 433 CPQ (APPLID UFT' ,
+                    'CALLER SRV NOHEADER | *.OUTPUT:'
+            End /* If .. Do */
         End /* When .. Do */
 
         When Abbrev("SEQUENCE",verb,3) Then Do
@@ -379,16 +396,18 @@ Do Forever
         When verb = "DATA" Then Do
             Parse Var line . count .
             If count = "" Then Leave
-            If Datatype(count,'W') Then Call DATA
-            Else 'CALLPIPE COMMAND XMITMSG 401' ,
+            If Datatype(count,'W') Then Do
+                Call DATA
+            End ; Else 'CALLPIPE COMMAND XMITMSG 401' ,
                 '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
         End /* When .. Do */
 
         When Abbrev("AUXDATA",verb,4) Then Do
             Parse Var line . count .
             If count = "" Then Leave
-            If Datatype(count,'W') Then Call AUXDATA
-            Else 'CALLPIPE COMMAND XMITMSG 401' ,
+            If Datatype(count,'W') Then Do
+                Call AUXDATA
+            End ; Else 'CALLPIPE COMMAND XMITMSG 401' ,
                 '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
         End /* When .. Do */
 
@@ -442,12 +461,19 @@ Exit rc
 DATA:
 
 If ^open Then Call OPEN
+If rc = 53 Then Do    /* if we find that the target user is bogus ... */
+    'CALLPIPE COMMAND XMITMSG 532 USER' ,
+        '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
+    rc = 532 ; Return rc
+End
+If rc ^= 0 Then Return rc
+If open ^= 1 Then Do ; rc = -1 ; Return rc ; End
 
 If uft > 1 Then ,
     'CALLPIPE COMMAND XMITMSG 323 "' || count || '"' ,
         '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
 Else 'CALLPIPE COMMAND XMITMSG 123 "' || count || '"' ,
-    '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
+        '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
 
 'SELECT OUTPUT FILE'
 
@@ -465,7 +491,7 @@ Else If Length(buffer) > 0 Then Do
 
 Do While count > 0
 
-    'READTO';  'PEEKTO BUFFER'
+    'READTO'; 'PEEKTO BUFFER'
     If rc ^= 0 Then Do
         Call ABORT
         Exit 12
@@ -506,6 +532,13 @@ Return
 AUXDATA:
 
 If ^open Then Call OPEN
+If rc = 53 Then Do    /* if we find that the target user is bogus ... */
+    'CALLPIPE COMMAND XMITMSG 532 USER' ,
+        '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
+    rc = 532 ; Return rc
+End
+If rc ^= 0 Then Return rc
+If open ^= 1 Then Do ; rc = -1 ; Return rc ; End
 
 If uft > 1 Then ,
     'CALLPIPE COMMAND XMITMSG 323 "' || count || '"' ,
@@ -513,22 +546,16 @@ If uft > 1 Then ,
 Else 'CALLPIPE COMMAND XMITMSG 123 "' || count || '"' ,
     '(APPLID UFT CALLER SRV NOHEADER | *.OUTPUT:'
 
-/*
-'SELECT OUTPUT AUXD'
- */
+/* 'SELECT OUTPUT AUXD'  */
 
 If Length(buffer) > count Then Do
-/*
-    'OUTPUT' Left(buffer,count)
- */
+/*  'OUTPUT' Left(buffer,count)  */
     buffer = Substr(buffer,count+1)
     count = 0
     End  /*  If  ..  Do  */
 
 Else If Length(buffer) > 0 Then Do
-/*
-    'OUTPUT' buffer
- */
+/*  'OUTPUT' buffer  */
     count = count - Length(buffer)
     buffer = ""
     End  /*  Else If .. Do  */
@@ -539,7 +566,7 @@ Do While count > 0
     If rc ^= 0 Then Do
         Call ABORT
         Exit 12
-        End  /*  If  ..  Do  */
+    End  /*  If  ..  Do  */
 
     If Length(buffer) = 0 Then Do 'READTO'; 'PEEKTO BUFFER'; End
     If Length(buffer) = 0 Then Do 'READTO'; 'PEEKTO BUFFER'; End
@@ -547,29 +574,23 @@ Do While count > 0
     If rc ^= 0 Then Do
         Call ABORT
         Exit 12
-        End  /*  If  ..  Do  */
+    End  /*  If  ..  Do  */
 
     If Length(buffer) > count Then Do
-/*
-        'OUTPUT' Left(buffer,count)
- */
+/*      'OUTPUT' Left(buffer,count)      */
         buffer = Substr(buffer,count+1)
         count = 0
-        End  /*  If  ..  Do  */
+    End  /*  If  ..  Do  */
 
     Else If Length(buffer) > 0 Then Do
-/*
-        'OUTPUT' buffer
- */
+/*      'OUTPUT' buffer   */
         count = count - Length(buffer)
         buffer = ""
-        End  /*  Else  If  ..  Do  */
+    End  /*  Else  If  ..  Do  */
 
-    End  /*  Do  While  */
+End  /*  Do  While  */
 
-/*
-'SELECT OUTPUT 0'
- */
+/* 'SELECT OUTPUT 0' */
 
 'CALLPIPE COMMAND XMITMSG 200 (APPLID UFT' ,
     'CALLER SRV NOHEADER | *.OUTPUT:'
@@ -586,63 +607,73 @@ line.i = "FROM" from || '@' || remote_host
 line.0 = i
 
 /*  Figure out how to SPOOL this file.  */
-Select  /*  type  */
+Select /* type */
 
     When type = "A" | type = "T" Then Do
-        If dev = "" Then dev = "PRT"
+/*      If dev = "" Then dev = "PRT"                                  */
+        If dev = "" Then dev = "VAFP"
         pipe = 'MAKETEXT -LOCAL'
         If cc = 'C' Then pipe = pipe '| ASATOMC'
                     Else pipe = pipe '| SPEC .09. X2C 1 1-* NEXT'
-        End  /*  When  ..  Do  */
+    End /* When .. Do */
+
+/* notes about CC 5A: cannot be peeked, cannot be received            */
 
     When type = "E" Then Do
-        If dev = "" Then dev = "PRT"
+/*      If dev = "" Then dev = "PRT"                                  */
+        If dev = "" Then dev = "VAFP"
         pipe = 'DEBLOCK LINEND 15 | DROP LAST'
         If cc = 'C' Then pipe = pipe '| ASATOMC'
                     Else pipe = pipe '| SPEC .09. X2C 1 1-* NEXT'
-        End  /*  When  ..  Do  */
+    End /* When .. Do */
 
     When type = "V" Then Do
-        If dev = "" Then dev = "PRT"
+/*      If dev = "" Then dev = "PRT"                                  */
+        If dev = "" Then dev = "VAFP"
         pipe = 'DEBLOCK CMS'
         If cc = 'C' Then pipe = pipe '| ASATOMC'
                     Else pipe = pipe '| SPEC .09. X2C 1 1-* NEXT'
-        End  /*  When  ..  Do  */
+    End /* When .. Do */
 
     When type = 'B' | type = 'I' | type = 'U' Then Do
         dev = "PUN"
         pipe = 'FBLOCK 80 00 | SPEC .41. X2C 1 1-* NEXT'
-        End  /*  When  ..  Do  */
+    End /* When .. Do */
 
     When type = "M" Then Do
-        If dev = "" Then dev = "PRT"
+/*      If dev = "" Then dev = "PRT"                                  */
+        If dev = "" Then dev = "VAFP"
         pipe = 'MAKETEXT -LOCAL | UFTDMAIL' user from ,
             '| SPEC .09. X2C 1 1-* NEXT'
        user = mailer
-       End  /*  When  ..  Do  */
+    End /* When .. Do */
 
     Otherwise Do            /*  treat it as binary  */
         dev = "PUN"
         pipe = 'FBLOCK 80 00 | SPEC .41. X2C 1 1-* NEXT'
-        End  /*  Otherwise  Do  */
+    End /* Otherwise Do */
 
-    End  /*  Select  type  */
+End /* Select type */
 
-/*  Create a temporary virtual unit-record device.  */
-Call Diag 08, 'DEFINE' dev addr
+/* create a temporary virtual unit-record device */
+Parse Value DiagRC(08,'DEFINE' dev addr) With 1 rc 10 . 17 rs
+If rc ^= 0 Then Do ; open = 0 ; Return ; End
 
-/*  we don't do forwarding  */
+/* we don't do forwarding */
 Parse Upper Var user user '@' .
-Call Diag 08, 'SPOOL' addr 'TO' user
+Parse Value DiagRC(08,'SPOOL' addr 'TO' user) With 1 rc 10 . 17 rs
+/* "no such user" is UFT error code 532 */
+If rc ^= 0 Then Do
+  Call Diag 08, 'DETACH' addr; open = 0; Return rc; End
 
-/*  set a few parameters  */
+/* set a few parameters from known metadata */
 Call Diag 08, 'SPOOL' addr 'FORM' form
 Call Diag 08, 'SPOOL' addr 'DEST' dest
 Call Diag 08, 'SPOOL' addr 'DIST' dist
 Call Diag 08, 'SPOOL' addr 'COPY' copy
 Call Diag 08, 'SPOOL' addr 'CLASS' class
 
-/*  build a TAG that RDRLIST will understand  */
+/* build a TAG that RDRLIST will understand */
 Parse Upper Var from from '@' morf .
 Parse Upper Var remote_host host '.' .
 If host = "" Then host = morf
@@ -654,16 +685,25 @@ xmm5 = Right(date,8); xmm6 = Right(time,8); xmm7 = Left(tz,3)
 'CALLPIPE COMMAND XMITMSG 9001 XMM1 XMM2 XMM3 XMM4 XMM5 XMM6 XMM7' ,
 '(APPLID UFT CALLER SRV NOHEADER' ,
     '| TAKE FIRST | VAR UTAG'
+If rc ^= 0 Then Do ; open = 0 ; rs = "" ; Return ; End
 Parse Value Diagrc(08,'TAG DEV' addr utag) With 1 rc 10 . 17 rs '15'x .
+If rc ^= 0 Then Do ; open = 0 ; Return ; End
 
 /*  insert a signature (magic number) for UFT  */
 /*  'CALLPIPE COMMAND XMITMSG 0 (APPLID UFT CALLER SRV NOHEADER' ,
     '| SPEC .03. X2C 1 .*. NEXT 1-* NEXT | URO' addr                  */
 'CALLPIPE VAR VRM | SPEC .03. X2C 1 .*UFTD/. NEXT 1-* NEXT | URO' addr
+If rc ^= 0 Then Do ; open = 0 ; rs = "" ; Return ; End
+
 /*  send the "meta file" as NOP records  */
 'CALLPIPE STEM LINE. | SPEC .03. X2C 1 1-* NEXT | URO' addr
+If rc ^= 0 Then Do ; open = 0 ; rs = "" ; Return ; End
+
+/* add the "file" output stream */
 'ADDSTREAM OUTPUT FILE'
+If rc ^= 0 Then Do ; open = 0 ; rs = "" ; Return ; End
 'ADDPIPE *.OUTPUT.FILE: |' pipe '| URO' addr
+If rc ^= 0 Then Do ; open = 0 ; rs = "" ; Return ; End
 
 open = 1
 i = 0
@@ -684,6 +724,7 @@ CLOSE:
 'SELECT OUTPUT 0'
 
 Parse Value Reverse(name) With _name '/' . ':' .
+Parse Var _name _name '\' .
 Parse Upper Value Reverse(_name) with fn '.' ft '.' .
 If fn = "" & ft ^= "" Then fn = from
 If fn ^= "" Then ,
@@ -699,12 +740,11 @@ Call Diag 08, 'DETACH' addr
 'CALLPIPE COMMAND XMITMSG 9002 SEQ USER HOST FROM DATE TIME TZ' ,
     '(APPLID UFT CALLER SRV NOHEADER | TAKE FIRST | VAR UMSG' ,
         '| SPEC /199 / 1 1-* NEXT | *.OUTPUT:'
-/*  '(APPLID UFT CALLER SRV NOHEADER | TAKE FIRST | VAR UMSG | CONSOLE'  */
 Parse Value Diagrc(08,'MSGNOH' user umsg) With 1 rc 10 . 17 rs '15'x .
 If rc ^= 0 Then ,
 Parse Value Diagrc(08,'MSG' user umsg) With 1 rc 10 . 17 rs '15'x .
-/*  Say "* File (" || seq || ") spooled to" user ,
-    "-- origin" host || '(' || from || ')' Date('U') Time() tz        */
+/*    "* File (" || seq || ") spooled to" user ,                      *
+ *    "-- origin" host || '(' || from || ')' Date('U') Time() tz      */
 
 /*  mark the file as closed  */
 open = 0
@@ -874,5 +914,64 @@ If val = "" Then Return h
 Call Value var, val, "SESSION NSLOOKUP"
 
 Return val
+
+/* ----------------------------------------------------------------- CPQ
+ *    selective 'cpq' logic
+ *             LOGMSG, USER user, USERS, NAMES, TIME, etc.
+ */
+_cpq: Procedure
+Parse Upper Arg a b .
+
+Select /* a */
+    When Abbrev("CPLEVEL",a,3)  Then ,
+        Parse Value DiagRC(08,"QUERY CPLEVEL") With 1 rc 10 . 17 rs
+    When Abbrev("CPUID",a,3)    Then ,
+        Parse Value DiagRC(08,"QUERY CPUID")   With 1 rc 10 . 17 rs
+    When Abbrev("FILES",a,1)    Then ,
+        Parse Value DiagRC(08,"QUERY FILES")   With 1 rc 10 . 17 rs
+    When Abbrev("INDICATE",a,3) Then ,
+        Parse Value DiagRC(08,"INDICATE")      With 1 rc 10 . 17 rs
+    When Abbrev("LOGMSG",a,3)   Then ,
+        Parse Value DiagRC(08,"QUERY LOGMSG")  With 1 rc 10 . 17 rs
+    When Abbrev("NAMES",a,1)    Then ,
+        Parse Value DiagRC(08,"QUERY NAMES")   With 1 rc 10 . 17 rs
+    When Abbrev("TIME",a,1)     Then ,
+        Parse Value DiagRC(08,"QUERY TIME")    With 1 rc 10 . 17 rs '15'x .
+    When Abbrev("USERS",a,1) & b = "" Then ,
+        Parse Value DiagRC(08,"QUERY USERS")   With 1 rc 10 . 17 rs
+    When Abbrev("USERS",a,1) & b ^= "" Then ,
+        Parse Value DiagRC(08,"QUERY USER" b)  With 1 rc 10 . 17 rs
+    Otherwise Return 433 "Invalid option" a
+End /* Select a */
+
+Return rc rs
+
+/* ------------------------------------------------------------ _CHKUSER
+ *    check user
+ *    Verify the target user exists on this system.
+ */
+_chkuser: Procedure
+Parse Upper Arg user . , .
+
+/* find an available virtual address for a disposable virtual punch   */
+Address "COMMAND" 'MAKEBUF'
+Address "COMMAND" 'GETFMADR'
+If rc ^= 0 Then Do ; 'DROPBUF' ; Return rc ; End
+Parse Pull . fm va zd .
+Address "COMMAND" 'DROPBUF'
+
+/* define that temporary virtual punch */
+Parse Value DiagRC(08, 'DEFINE PUNCH' va) With 1 rc 10 . 17 rs
+If Right(rs,1) = '15'x Then rs = Left(rs,Length(rs)-1)
+If rc ^= 0 Then Return rc rs
+
+/* sense the existence of the target user by trying to spool to him */
+Parse Value DiagRC(08, 'SPOOL' va 'TO' user) With 1 rc 10 . 17 rs
+If Right(rs,1) = '15'x Then rs = Left(rs,Length(rs)-1)
+xrc = rc ; xrs = rs
+
+Call Diag 08, 'DETACH' va
+
+Return xrc xrs
 
 
