@@ -39,7 +39,7 @@
 *010    X ........
 0011      VMCMSUFT/&1
 0012      POSIXUFT/&1
-*013    X ........
+0013      UFT/redacted
 *014    X ........
 *
   15    E Unknown &1 command
@@ -129,6 +129,7 @@
 0221      221 Service closing control connection.
 0222      222 &1 UFT/2 VMCMSUFT/&3 &4 ; ready.
 0223      223 &1 UFT/2 POSIXUFT/&3 &4 ; ready.
+0224      224 *anonymous UFT/2 UFT/redacted 0 ; ready.
 0230      230 Local username okay, proceed.
 0250      250 Requested file action okay, completed.
 *
@@ -149,6 +150,7 @@
 0404      404 Document not found
 0407      407 Proxy Authentication Required
 *411      411 protocol sequence error
+ 416      416 Missing operand(s)
 *421      421 (see 521)
 0426      426 Connection closed; transfer aborted.
 *432      432 No such local user &1

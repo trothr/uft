@@ -60,11 +60,11 @@ int uftd_pref(char*head,char*tail,int size)
 /* ------------------------------------------------------------------ */
 int main(int argc,char*argv[])
   { static char _eyecatcher[] = "uftd.c main()";
-
     char        line[256], temp[256], user[64], auth[256], *p, *q;
-    int         n, uuid, i;
+    int         n, uuid, i, rc;
     char        type[16], seqs[8], from[256];
     char        wffn[64];
+    char        *mv[8], bss[16];
 
     uftcflag = 0x00000000;      /* default */
 
@@ -138,16 +138,32 @@ int main(int argc,char*argv[])
 
     /* all okay thus far, now send the herald (informative, but ACK)  */
 
-#ifdef          UFT_ANONYMOUS
-    (void) sprintf(temp,"*anonymous");
-#else
     (void) gethostname(temp,sizeof(temp));
+    mv[0] = arg0;     /* message formatter does not actually use this */
+    mv[1] = temp;
+    mv[2] = UFT_PROTOCOL;
+    mv[3] = /* UFT_VERSION */ UFT_VRM;
+    sprintf(bss,"%d",BUFSIZ);
+    mv[4] = bss;
+
+#ifdef          UFT_ANONYMOUS
+//  (void) sprintf(temp,"*anonymous");
+    rc = uftx_message(line,sizeof(line),224,"SRV",5,mv);
+/*    224 *anonymous UFT/2 UFT/redacted 0 ; ready.                    */
+#else
+    rc = uftx_message(line,sizeof(line),223,"SRV",5,mv);
+/*    223 &1 UFT/2 POSIXUFT/&3 &4 ; ready.                            */
 #endif
+
 /*  (void) sprintf(line,"112 %s %s %s %d ready.",                     */
-    (void) sprintf(line,"222 %s %s %s %d ; ready.",
+/*  (void) sprintf(line,"222 %s %s %s %d ; ready.",                // */
 /* 222 ibmisv.marist.edu UFT/2 VMCMSUFT/1.10.5 ; ready.               */
-                temp,UFT_PROTOCOL,UFT_VERSION,BUFSIZ);
-    (void) uftdstat(1,line);           /* 200 series herald for UFT/2 */
+/*              temp,UFT_PROTOCOL,UFT_VERSION,BUFSIZ);             // */
+
+    p = line;
+    while (*p != 0x00 && *p != ' ') p++;    /* skip past message code */
+    if (*p == ' ') p++; if (*p == ' ') p++; if (*p == ' ') p++;
+    (void) uftdstat(1,p);        /* 200 series herald indicates UFT/2 */
 
     /* who's on the other end of the socket? */
     (void) tcpident(0,from,256);      /* IDENT got a bad rap and died */
@@ -489,8 +505,8 @@ int main(int argc,char*argv[])
             (void) tcpputs(1,"200 ACK EOF");    /* ACK */
 
             /* notify the local user that a file has arrived -------- */
-            (void) uftdimsg(user,seqs,from,type);     /* IMSG 'write' */
-            (void) uftdlmsg(user,seqs,from,type);           /* SYSLOG */
+/*          (void) uftdimsg(user,seqs,from,type);  // see uftd_fann() */
+/*          (void) uftdlmsg(user,seqs,from,type);           // SYSLOG */
             (void) uftdlist(atoi(seqs),from);             /* ala 'ls' */
 
             seteuid(0);                      /* go back to being root */
@@ -538,7 +554,7 @@ int main(int argc,char*argv[])
             cffn[0] = 0x00;  wffn[0] = 0x00;
 
             /* at this point, signal ACK to client */
-            (void) tcpputs(1,"200 ACK ABORT");    /* ACK */
+            (void) tcpputs(1,"226 ACK ABORT");      /* "rollback" ACK */
 
             /* now lose the spoolid number, clear user, reset eUID    */
             n = -1;                    /* now lose the spoolid number */

@@ -10,6 +10,13 @@
  *
  *        Note: This is for UFT but includes MSG functions also.
  *
+
+needed:
+int uftc_open(char*,char*,int*);
+uftc_write()
+uftc_read()
+int uftc_close(int*);
+
  */
 
 #ifndef PREFIX
@@ -36,15 +43,22 @@
 #define __USE_XOPEN
 #include <time.h>
 
+/* OpenVM is a POSIX environment for VM/CMS so set the OECS symbol    */
 #ifdef          __OPEN_VM
  #ifndef        OECS
   #define       OECS
  #endif
 #endif
 
+#ifdef UFT_DO_SYSLOG
+ #include <syslog.h>
+#endif
+
+/* The following three lines are related to the XMITMSGX package      *
+ * which is maintained separately from the UFT package.               */
 #include "xmitmsgx/xmitmsgx.h"
-char *xmmprefix = PREFIX;
-static struct MSGSTRUCT uftmsgs;
+char *xmmprefix = PREFIX;            /* tells XMM to share our prefix */
+static struct MSGSTRUCT uftmsgs;      /* info for the message handler */
 
 #include "uft.h"
 
@@ -56,7 +70,9 @@ int uftlogfd = -1;
 
 /* ---------------------------------------------------------------------
  *    This routine handles message FORMATTING (not message delivery).
- *    It's a different way of doing gettext() type processing.
+ *    It's a different way of doing gettext() type processing
+ *    which is compatible with the 'XMITMSG' command and APPLMSG macro
+ *    from VM/CMS land. (POSIX UFT shares the same messages with CMS.)
  */
 int uftx_message(char*mo,int ml,                    /* buffer, buflen */
                  int mn,                            /* message number */
@@ -91,7 +107,8 @@ int uftx_message(char*mo,int ml,                    /* buffer, buflen */
 /* -------------------------------------------------------- User Message
  *  This routine attempts to deliver a message to a logged-on user.
  *  This is somewhat crude: we toss the work of finding the user
- *  and delivering the message to the 'write' command.
+ *  and delivering the message to the 'write' command. But be careful:
+ *  on MS Windows there is a completely different 'write' command.
  */
 int uftd_message(char*user,char*text)
   { static char _eyecatcher[] = "uftd_message()";
@@ -336,6 +353,12 @@ int uftd_fann(char*user,char*spid,char*from)
     /* -------- try brute force ------------------------------------- */
     rc = uftd_message(un,buffer);
 
+    /* -------- merge uftdlmsg logic here --------------------------- */
+#ifdef UFT_DO_SYSLOG
+    openlog("uftd",LOG_PID|LOG_CONS,LOG_UUCP);
+    syslog(LOG_INFO,"%s",buffer);
+#endif
+
     return rc;
   }
 
@@ -352,36 +375,50 @@ int uftd_fann(char*user,char*spid,char*from)
 
 /* -------------------------------------------------------------- USERID
  *    return login name from the best of several standard sources
+ *
+ *        Note: Size is limited to 63 characters because we force it
+ *              to lower case (ths is POSIX!) using a private buffer.
  */
 char *uftx_user()
   { static char _eyecatcher[] = "uftx_user()";
-    char       *u;
-
+    int i;
+    char *u;
+    static char ut[64];
     struct passwd *pwdent;
 
-    /*  first try effective uid key into passwd  */
+    u = "";
+
+    /* first try effective uid key into passwd */
+/*  if (*u == 0x00)                           this would be redundant */
     pwdent = getpwuid(geteuid());
-    if (pwdent) return pwdent->pw_name;
+    if (pwdent) u = pwdent->pw_name; if (u == 0x0000) u = "";
 
-    /*  next try real uid key into passwd  */
+    /* next try real uid key into passwd */
+    if (*u == 0x00) {
     pwdent = getpwuid(getuid());
-    if (pwdent) return pwdent->pw_name;
+    if (pwdent) u = pwdent->pw_name; if (u == 0x0000) u = ""; }
 
-    /*  thin ice,  try USER env var  */
-    u = getenv("USER");
-    if (u != 0x0000 && u[0] != 0x00) return u;
+    /* skating on thin ice: try USER environment variable */
+    if (*u == 0x00) {
+    u = getenv("USER"); if (u == 0x0000) u = ""; }
 
-    /*  last resort, try LOGNAME env var  */
-    u = getenv("LOGNAME");
-    if (u != 0x0000 && u[0] != 0x00) return u;
+    /* last resort: try LOGNAME environment variable */
+    if (*u == 0x00) {
+    u = getenv("LOGNAME"); if (u == 0x0000) u = ""; }
 
-    /*  give up!  */
-    return "";
+    /* force the username to lower case (ths is POSIX!) */
+    i = 0;
+    while (*u != 0x00 && i < sizeof(ut) - 1)
+      { if (isupper(*u)) ut[i] = tolower(*u);
+                    else ut[i] = *u;
+        i++; u++;
+      } ut[i] = 0x00;
+    return ut;
   }
 
 #ifndef _OE_SOCKETS
 /* ------------------------------------------------------------- USERIDG
- *  "g" for GECOS field, return personal name string, if available
+ *    "g" for GECOS field, return personal name string, if available
  */
 char *useridg()
   {
@@ -752,6 +789,50 @@ int uftc_wack(int s,char*b,int l)
       }
   }
 
+/* ----------------------------------------------------------- UFTC_OPEN
+ *    open a connection to the UFT server - direct TCP or via proxy
+ */
+int uftc_open(char*peer,char*prox,int*pipe)
+  { static char _eyecatcher[] = "uftc_open()";
+    int s;
+
+    /* if the supplied peer is bogus then stop right here             */
+    if (peer == NULL && *peer == 0x00) return -1; /* FIXME: set errno */
+
+    /* if a proxy string was provided then try connecting that way    */
+    if (prox != NULL && *prox != 0x00) return uftx_proxy(peer,prox,pipe);
+
+    /* normal connection is direct TCP with built-in DNS resolution   */
+    s = tcpopen(peer,0,0);
+/*  if (s < 0) { perror(peer); return -1; }            ** open failed */
+    if (s < 0) return s;                               /* open failed */
+    pipe[0] = pipe[1] = s;      /* input and output are the same here */
+    return 0;
+  }
+
+/* ---------------------------------------------------------- UFTC_WRITE
+ */
+int uftc_write() { }
+
+/* ----------------------------------------------------------- UFTC_READ
+ */
+int uftc_read() { }
+
+/* ---------------------------------------------------------- UFTC_CLOSE
+ *    close the pair of file descriptors talking to the server
+ */
+int uftc_close(int*pipe)
+  { static char _eyecatcher[] = "uftc_close()";
+    int rc;
+    rc = 0;
+    if (pipe[0] >= 0) rc = close(pipe[0]);
+    if (rc < 0) return rc;
+    if (pipe[1] >= 0 && pipe[1] != pipe[0]) rc = close(pipe[1]);
+    if (rc < 0) return rc;
+    pipe[0] = pipe[1] = -1;
+    return 0;
+  }
+
 /* ----------------------------------------------------------- UFTD_AGCK
  *    This routine handles an AGENT inquiry commant. (agent check)
  *    Return values: 2 ACK, 4 NAK client, 5 NAK server
@@ -1056,6 +1137,27 @@ int uftx_atoi(char*s)
             default: i = i * 10 + (*s & 0x0F); break; }
         s++; }
     return i;
+  }
+
+/* ------------------------------------------------------------ READSPAN
+ *    Read a "spanning record". When reading from a pipe, the requested
+ *    number of bytes might not be available to just one read() call.
+ *    This function performs as many read()s as needed until the desired
+ *    number of bytes are acquired. This is how we explicitly discard
+ *    any record structure that UNIX may have learned about.
+ */
+
+int uft_readspan(int s,char*b,int c)
+  { static char _eyecatcher[] = "uft_readspan()";
+    int         i,  j;
+
+    for (j = 0; c > 0; )
+      { i = read(s,&b[j],c);
+        if (i < 0) return i;
+        if (i < 1) break;
+        j = j + i;
+        c = c - i; }
+    return j;
   }
 
 /* ------------------------------------------------------------ UFTDL699

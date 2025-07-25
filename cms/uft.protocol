@@ -1,6 +1,6 @@
 © Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
 
-This is  uft.protocol  in plain text.
+This is uft.protocol in plain text.
 
 
                         UFT/2  Unsolicited File Transfer
@@ -177,7 +177,7 @@ the connection from the client.   A UFT/1 the server sends a 1xx herald.
         Enjoy!
 
 --
-Rick Troth, Houston, Texas   <troth@casita.houston.tx.us>
+Rick Troth <rick@trothtech.us>
 
 
 

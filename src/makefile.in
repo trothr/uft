@@ -7,8 +7,8 @@
 #
 
 APPLID          =       uft
-VERSION         =       2.0
-DELIVERABLES    =       uftd sf rls rcv uftcndd tell
+VERSION         =       2.0.7
+DELIVERABLES    =       uftd sf rls rcv uftcndd tell cpq
 SOURCEURL       =       https://raw.githubusercontent.com/trothtech/uft/refs/heads/main
 #                       https://raw.githubusercontent.com/trothtech/uft/master
 
@@ -31,11 +31,11 @@ all:		$(DELIVERABLES)
 
 uftd:		makefile uftd.o \
 			uftdnext.o uftddata.o uftduser.o \
-			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o uftdcpq.o \
+			uftdmove.o uftdimsg.o uftdlist.o uftdcpq.o \
 			abbrev.o tcpio.o aecs.o uftlib.o xmitmsgx.o
 		$(CC) $(LDFLAGS) -o uftd uftd.o \
 			uftdnext.o uftddata.o uftduser.o \
-			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o uftdcpq.o \
+			uftdmove.o uftdimsg.o uftdlist.o uftdcpq.o \
 			abbrev.o tcpio.o aecs.o uftlib.o xmitmsgx.o $(LIBS)
 
 uftdnext.o:	makefile uft.h uftdnext.c
@@ -53,8 +53,8 @@ uftdmove.o:	makefile uft.h uftdmove.c
 uftdimsg.o:	makefile uft.h uftdimsg.c
 		$(CC) $(CFLAGS) -c uftdimsg.c
 
-uftdlmsg.o:	makefile uft.h uftdlmsg.c
-		$(CC) $(CFLAGS) -c uftdlmsg.c
+#uftdlmsg.o:	makefile uft.h uftdlmsg.c
+#		$(CC) $(CFLAGS) -c uftdlmsg.c
 
 uftdlist.o:	makefile uft.h uftdlist.c
 		$(CC) $(CFLAGS) -c uftdlist.c
@@ -68,11 +68,11 @@ uftd.o: 	makefile uft.h uftd.c
 sf:		makefile uftc.o \
 			uftctext.o uftcprot.o \
 			uftlib.o tcpio.o xmitmsgx.o \
-			aecs.o readspan.o abbrev.o
+			aecs.o abbrev.o
 		$(CC) $(LDFLAGS) -o sf uftc.o \
 			uftctext.o uftcprot.o \
 			uftlib.o tcpio.o xmitmsgx.o \
-			aecs.o readspan.o abbrev.o $(LIBS)
+			aecs.o abbrev.o $(LIBS)
 
 uftc.o: 	makefile uft.h uftc.c
 		$(CC) $(CFLAGS) -c uftc.c
@@ -104,9 +104,9 @@ maketext:	makefile maketext.o tcpio.o aecs.o
 			maketext.o tcpio.o aecs.o $(LIBS)
 
 cpq:		makefile cpq.o \
-			tcpio.o aecs.o
+			uftlib.o tcpio.o xmitmsgx.o abbrev.o
 		$(CC) $(LDFLAGS) -o cpq cpq.o \
-			tcpio.o aecs.o $(LIBS)
+			uftlib.o tcpio.o xmitmsgx.o abbrev.o $(LIBS)
 
 cpqu:		makefile cpqu.o \
 			tcpio.o aecs.o
@@ -116,16 +116,17 @@ cpqu:		makefile cpqu.o \
 clean:
 		rm -f core a.out *.o *.a *.lst CEEDUMP.* \
 			uftd sf maketext cpq cpqu uftcmime \
-			tell msgpipe msgcat msgd imsg uftcndd
+			tell msgpipe msgcat msgd imsg uftcndd ufta
 		sh -c ' cd xmitmsgx ; exec $(MAKE) clean '
 
 distclean:
 		rm -f core a.out *.o *.a *.lst CEEDUMP.* \
 			uftd sf maketext cpq cpqu uftcmime \
-			tell msgpipe msgcat msgd imsg uftcndd \
+			tell msgpipe msgcat msgd imsg uftcndd ufta \
 			*:* *';'* makefile Makefile makefile.old \
-			uft.spec configure.sh configure.h *.rpm *.log .rpmseq
-		rm -rf rpmbuild.d
+			uft.spec uft.dctl configure.sh configure.h \
+			*.rpm *.deb *.log .rpmseq
+		rm -rf rpmbuild.d debbuild.d
 		sh -c ' cd xmitmsgx ; exec $(MAKE) distclean '
 
 #makefile:	makefile.in configure
@@ -136,6 +137,8 @@ distclean:
 help:
 		@echo "$(MAKE):"
 		@echo "$(MAKE): this is the build logic for UFT, POSIX 'sendfile'"
+		@echo "$(MAKE): targets include ..."
+		@echo "$(MAKE):         all, install, uft.rpm, uft.deb"
 		@echo "$(MAKE):"
 
 #
@@ -160,8 +163,8 @@ cpqu.o:		makefile cpqu.c
 aecs.o: 	makefile aecs.c aecs.h
 		$(CC) $(CFLAGS) -c aecs.c
 
-readspan.o:	makefile readspan.c
-		$(CC) $(CFLAGS) -c readspan.c
+#readspan.o:	makefile readspan.c
+#		$(CC) $(CFLAGS) -c readspan.c
 
 xmitmsgx.o:
 	sh -c ' cd xmitmsgx ; exec $(MAKE) xmitmsgx.o '
@@ -169,6 +172,14 @@ xmitmsgx.o:
 
 uftlib.o:	makefile uft.h uftlib.c
 		$(CC) $(CFLAGS) -o uftlib.o -c uftlib.c
+
+anonymous:
+		$(CC) $(CFLAGS) -DUFT_ANONYMOUS -o uftd.o -c uftd.c
+		$(CC) $(CFLAGS) -DUFT_ANONYMOUS -o uftdcpq.o -c uftdcpq.c
+		$(CC) $(CFLAGS) -DUFT_ANONYMOUS -o uftduser.o -c uftduser.c
+		@rm -f uftd
+		$(MAKE) uftd
+		mv uftd ufta
 
 #
 #	  Name: makefile.in (make file source)
@@ -196,9 +207,9 @@ msgd:		makefile msgd.o msgdlmsg.o \
 		strip msgd
 
 tell:		makefile msgc.o uftlib.o tcpio.o xmitmsgx.o \
-		  uftctext.o uftcprot.o aecs.o readspan.o abbrev.o
+		  uftctext.o uftcprot.o aecs.o abbrev.o
 	$(CC) $(LDFLAGS) -o tell msgc.o uftlib.o tcpio.o xmitmsgx.o \
-		  uftctext.o uftcprot.o aecs.o readspan.o abbrev.o $(LIBS)
+		  uftctext.o uftcprot.o aecs.o abbrev.o $(LIBS)
 	strip tell
 # msgcmsp.o msgcuftd.o msglocal.o homedir.o
 
@@ -240,7 +251,7 @@ homedir.o:	makefile homedir.c
 install:	$(DELIVERABLES)
 		mkdir -p $(PREFIX)/bin $(PREFIX)/etc/xinetd.d \
 			$(PREFIX)/share/locale/$(LOCALE) $(PREFIX)/libexec
-		cp -p sf rls rcv uftcndd tell $(PREFIX)/bin/.
+		cp -p sf rls rcv uftcndd tell cpq $(PREFIX)/bin/.
 #		cp -p uftd $(PREFIX)/sbin/.
 		cp -p uftd $(PREFIX)/libexec/.
 		cp -p uft.inet $(PREFIX)/etc/xinetd.d/uft
@@ -274,19 +285,24 @@ uft.spec:       uft.spec.in
                   | sed 's#%SPEC_LOCALE%#$(LOCALE)#g' \
 		  > uft.spec
 
-#Get yourself an easy source package, e.g. telnet-*-.src.rpm and do an
-# rpm -i telnet-*.src.rpm
-# cd /usr/src/redhat/SPECS  - see the  .spec  file
+#rpmbuild:
+#		rpm -bc --short-circuit uft.spec
 
-#Now the .spec file tells how to unpack, patch, configure, compile, etc.
-#And it tells what files go into the final deliverable, and what scripts
-#run at installation (or removal) time.
-#You can even do a 'rpm -ba telnet.spec' so it will build a new .src.rpm
-#file (assuming you did patches etc in it).
+########################################################################
+# DEB support
+uft.deb:        uft.dctl
+		./debbuild.sh $(APPLID) $(VERSION)
 
-#Rob
-
-rpmbuild:
-		rpm -bc --short-circuit uft.spec
+uft.dctl:       uft.dctl.in
+		grep -v '#' uft.dctl.in \
+		  | sed 's#%SPEC_PREFIX%#$(PREFIX)#g' \
+		  | sed 's#%SPEC_APPLID%#$(APPLID)#g' \
+		  | sed 's#%SPEC_VERSION%#$(VERSION)#g' \
+		  | sed 's#%SPEC_RELEASE%#$(RELEASE)#g' \
+		  | sed 's#%SPEC_UNAMEM%#$(UNAMEM)#g' \
+		  | sed 's#%SPEC_STAGING%#$(STAGING)#g' \
+		  | sed 's#%SPEC_LOCDIR%#$(LOCDIR)#g' \
+		  | sed 's#%SPEC_LOCALE%#$(LOCALE)#g' \
+		  | uniq > uft.dctl
 
 
