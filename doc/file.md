@@ -1,6 +1,6 @@
 # FILE
 
-UFT protocol FILE command
+UFT protocol `FILE` command
 
 This command indicates the start of a transaction to send a file.
 
@@ -36,6 +36,7 @@ The only supported authentications at this time are AGENT and IDENT.
 
 ## Command Sequencing
 
-The `FILE` command must come before any others.
+The `FILE` command must come before any others except 
+`CPQ`, `HELP`, `AGENT`, or an abortive `QUIT`.
 
 

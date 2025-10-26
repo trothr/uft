@@ -11,6 +11,13 @@
 #include <time.h>
 #include <sys/types.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+ typedef int uid_t;
+ typedef int gid_t;
+#else
+ #define UFT_POSIX
+#endif
+
 #include "tcpio.h"
 
 /*        Note: define UFT_ANONYMOUS to use 'uftd' via Tor            *
@@ -19,16 +26,23 @@
 
 /* the version number and copyright */
 #define         UFT_PROTOCOL    "UFT/2"
-#define         UFT_VERSION     "POSIXUFT/2.0.7"
+#ifndef         UFT_VERSION
+ #define        UFT_VERSION     "POSIXUFT/2.0.12"
+#endif
 #define         UFT_COPYRIGHT   "© Copyright 1995-2025 Richard M. Troth"
-#define         UFT_VRM         "2.0.7"
-#define    UFT_VERINT    (((2) << 24) + ((0) << 16) + ((7) << 8) + (0))
+#define         UFT_VRM         "2.0.12"
+#define    UFT_VERINT    (((2) << 24) + ((0) << 16) + ((12) << 8) + (0))
+
+#ifndef         UFT_TAG
+ #define        UFT_TAG         "UFT"
+#endif
 
 /* server constants follow */
 
 /* the SPOOLDIR has a sub-directory for each recipient */
 #ifndef         UFT_SPOOLDIR
  #define        UFT_SPOOLDIR    "/var/spool/uft"
+             /*                 "C:/ProgramData/uft" */
 #endif
 
 #ifndef         UFT_GID
@@ -62,9 +76,7 @@
 #define         UFT_PORT        608
 #define         IDENT_PORT      113
 
-#ifndef         BUFSIZ
-#define         BUFSIZ          64512
-#endif
+#define         UFT_BUFSIZ      64512
 
 #define         UFT_SYSLOG_FACILITY     LOG_UUCP
 
@@ -230,18 +242,38 @@ typedef struct  UFTSTAT {
                 uft_hold,       /* a z/VM or other mainframe concept  */
                 uft_keep,       /* a z/VM or other mainframe concept  */
                 uft_msg,        /* a z/VM or other mainframe concept  */
+                uft_recfm;      /* a z/VM or other mainframe concept  */
 
-                name[64],
-                from[64],
-                user[16],       /* from - parsed, NOT who it's to/for */
-                host[16],       /* from - parsed */
-
-                form[16],       /* z/VM, mainframe, or print concept  */
-                dist[16],       /* z/VM, mainframe, or print concept  */
-                dest[16],       /* z/VM, mainframe, or print concept  */
-                title[64];      /* z/VM, mainframe, or print concept  */
+    char        uft_user[64],   /* who this file is sent *to*         */
+                uft_from[64],   /* who this file is received *from*   */
+                uft_name[64],   /* name of file (optional in UFT)     */
+                uft_form[16],   /* z/VM, mainframe, or print concept  */
+                uft_dist[16],   /* z/VM, mainframe, or print concept  */
+                uft_dest[16],   /* z/VM, mainframe, or print concept  */
+                uft_title[64];  /* z/VM, mainframe, or print concept  */
 
 /*
+
+    CLASS               char uft_class
+    COPY | COPIES       int uft_nlink
+    DATE | XDATE        time_t uft_mtime
+    DEST                char uft_dest[]
+    DIST                char uft_dist[]
+    FORM                char uft_form[]
+    GROUP               int uft_gid
+    HOLD                char uft_hold
+    NAME                char uft_name[]
+    OWNER               int uft_uid
+    RECFMT              char uft_recfm
+    RECLEN              int uft_blksize
+    TITLE               char uft_title[]
+    PROT | XPERM        char uft_mode[]
+    FCB
+    MSG | NOTIFY
+    SEQ
+    UCS
+    VERSION
+
 tqcdhkm--- cpy user     host         size year mm dd time  sid  name
 ---------- --- -------- -------- -------- ---- -- -- --:-- ---- ----------------
 ||||||\___ msg (M) nomsg (-)
@@ -253,38 +285,35 @@ tqcdhkm--- cpy user     host         size year mm dd time  sid  name
 \_________ type (I or A or N)
  */
 
-    char        sidp[64];               /* SID full path              */
-    void        *prev, *next;           /* pointers if chaining       */
+    char        uft_sidp[64];           /* SID full path              */
+    void        *uft_prev, *uft_next;   /* pointers if chaining       */
                         } UFTSTAT ;
 
 /*
 
-uft send <file> <target>
-uft list
-uft receive
-uft stat <spoolid> <varname>
-
-uft_ver == a version number or revision index
-uft_recfmt == F | V
-uft_reclen == record length
-
-uft_host.html ==
-uft_name.html ==
-uft_note.html ==
-uft_noti.html ==
-uft_osid.html ==
-uft_seq.html ==
-uft_ucs.html ==
-uft_umsg.html ==
-uft_user.html ==
-
+        unsigned long  st_dev;          see uft_rudev
+        unsigned long  st_ino;          OKAY
+        unsigned short st_mode;         OKAY
+        unsigned short st_nlink;        OKAY copy count
+        unsigned short st_uid;          OKAY
+        unsigned short st_gid;          OKAY
+        unsigned long  st_rdev;         see uft_rudev
+        unsigned long  st_size;         OKAY
+        unsigned long  st_blksize;      OKAY
+        unsigned long  st_blocks;       N/A
+        unsigned long  st_atime;        N/A
+        unsigned long  st_atime_nsec;   N/A
+        unsigned long  st_mtime;        OKAY
+        unsigned long  st_mtime_nsec;   N/A
+        unsigned long  st_ctime;        see uft_stime
+        unsigned long  st_ctime_nsec;   N/A
  */
 
 ssize_t getuftentries(int,char*,size_t,off_t*);
-/* ssize_t getuftentries(int fd, char *buf, size_t nbytes , off_t *basep); */
+/* ssize_t getuftentries(int fd,char*buf,size_t nbytes,off_t*basep);  */
 
-int uftopen(const char *,int,mode_t);
-/* int uftopen(const char *pathname, int flags, mode_t mode); */
+int uftopen(const char*,int,mode_t);
+/* int uftopen(const char*pathname,int flags,mode_t mode); */
 
 int uft_readspan(int,char*,int);
 
@@ -325,12 +354,16 @@ int uftd_agck(char*);
 
 int uftx_proxy(char*,char*,int*);
 int uft_stat(char*,struct UFTSTAT*);
+int uft_purge(struct UFTSTAT*);
 int uftx_atoi(char*);
 
 void uftdstat(int,char*);
 
 int uftdcpq(char*,char*,int);
 int uftdl699(int,char*);
+
+int uftc_open(char*,char*,int*);
+int uftc_close(int*);
 
 #define         _UFT_HEADER_
 #endif

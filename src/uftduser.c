@@ -1,22 +1,29 @@
-/* © Copyright 1995, Richard M. Troth, all rights reserved.  <plaintext>
+/* © Copyright 1995-2025, Richard M. Troth, all rights reserved.  <plaintext>
  *
- *	  Name: uftduser.c
- *		Unsolicited File Transfer daemon "user" function
- *		Returns a non-negative uid on success.
- *		Returns zero (root) for valid queues
- *		which have no real user to back them up.
+ *        Name: uftduser.c (C program source)
+ *              Unsolicited File Transfer daemon "user" function
+ *              Returns a non-negative uid on success.
+ *              Returns zero (root) for valid queues
+ *              which have no real user to back them up.
  *
- *		Thanks to Bill Hunter at the University of Alabama
- *		for reporting certain problems with AIX here.
+ *              Thanks to Bill Hunter at the University of Alabama
+ *              for reporting certain problems with AIX here.
  *
  *        NOTE: This source is due for merge into UFTD or UFTLIB.
  */
 
-#include <pwd.h>
-#include <errno.h>
-extern	int	errno;
+extern  int     errno;
 #include <unistd.h>
 #include <sys/stat.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+ #include <winsock2.h>
+#else
+ #include <sys/socket.h>
+ #include <netdb.h>
+ #include <pwd.h>
+ #include <errno.h>
+#endif
 
 #include "uft.h"
 
@@ -26,14 +33,15 @@ extern	int	errno;
  */
 int uftduser(char*user)
   { static char _eyecatcher[] = "uftduser()";
-    int 	i, uuid;
+#ifdef UFT_POSIX
+    int         i, uuid;
     struct passwd *pwdent;
 
     /* we'll try to make this non-zero later */
     uuid = 0;
 
     /* pseudo-users are supported;  that is,  one can 'sendfile'
-	to a user that doesn't exist iff the sub-directory exists */
+        to a user that doesn't exist iff the sub-directory exists */
     pwdent = getpwnam(user);
 
     /* does the directory exist already? */
@@ -47,30 +55,37 @@ int uftduser(char*user)
     /* some error;  should we create a sub-dir? */
     if (i < 0 && errno == ENOENT)
       {
-	if (pwdent == NULL) return -1;
-	if (mkdir(user,0770) < 0) return i;
-	if (pwdent != NULL)
-	(void) chown(user,pwdent->pw_uid,UFT_GID);
-	i = chdir(user);
+        if (pwdent == NULL) return -1;
+        if (mkdir(user,0770) < 0) return i;
+        if (pwdent != NULL)
+        (void) chown(user,pwdent->pw_uid,UFT_GID);
+        i = chdir(user);
       }
 
     /* errors persist!  bail out! */
     if (i < 0) return i;
 
     /* if the user exists,  try chowning the SEQuence file(s)
-	and the directory,  if that works,  set effective UID */
+        and the directory,  if that works,  set effective UID */
     if (pwdent != NULL)
       {
-	uuid = pwdent->pw_uid;
-	(void) chown(UFT_SEQFILE,uuid,UFT_GID);
-	(void) chmod(UFT_SEQFILE,0660);
-	(void) chown(UFT_SEQFILE_ALT,uuid,UFT_GID);
-	(void) chmod(UFT_SEQFILE_ALT,0660);
-	if (chown(".",uuid,UFT_GID) == 0) (void) seteuid(uuid);
+        uuid = pwdent->pw_uid;
+        (void) chown(UFT_SEQFILE,uuid,UFT_GID);
+        (void) chmod(UFT_SEQFILE,0660);
+        (void) chown(UFT_SEQFILE_ALT,uuid,UFT_GID);
+        (void) chmod(UFT_SEQFILE_ALT,0660);
+        if (chown(".",uuid,UFT_GID) == 0) (void) seteuid(uuid);
       }
 
     /* return the uid (non-negative) on success */
     return uuid;
+
+#else
+    int rc;
+    /* does the directory exist already? */
+    rc = chdir(user);
+    return rc;
+#endif
   }
 
 

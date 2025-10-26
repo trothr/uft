@@ -1,6 +1,6 @@
 /* Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
  *
- *        Name: uftd.c
+ *        Name: uftd.c (C program source)
  *              Universal File Transfer daemon
  *              Unsolicited File Transfer daemon
  *      Author: Rick Troth, Houston, Texas, USA (concerto)
@@ -19,6 +19,14 @@
 #include <unistd.h>
 
 #include "uft.h"
+
+#ifdef UFT_POSIX
+ #include <sys/socket.h>
+ #include <netdb.h>
+#else
+ #include <winsock2.h>
+#endif
+
 char           *arg0;
 int             tf, cf, df;     /* temp, meta, and data file handles */
 char            tffn[64], cffn[64], dffn[64];
@@ -96,7 +104,9 @@ int main(int argc,char*argv[])
     /* If we're not running as root (or if we don't at least           *
      * own the UFT spooling directory) then we're hopeless.            *
      * But we might also want to be in the UFT_GROUP (typically 0).    */
+#ifdef UFT_POSIX
     (void) setgid(UFT_GID);
+#endif
 
     /* work from the UFT spool directory */
     n = chdir(UFT_SPOOLDIR);
@@ -143,11 +153,11 @@ int main(int argc,char*argv[])
     mv[1] = temp;
     mv[2] = UFT_PROTOCOL;
     mv[3] = /* UFT_VERSION */ UFT_VRM;
-    sprintf(bss,"%d",BUFSIZ);
+    sprintf(bss,"%d",UFT_BUFSIZ);
     mv[4] = bss;
 
 #ifdef          UFT_ANONYMOUS
-//  (void) sprintf(temp,"*anonymous");
+/*  (void) sprintf(temp,"*anonymous");                             // */
     rc = uftx_message(line,sizeof(line),224,"SRV",5,mv);
 /*    224 *anonymous UFT/2 UFT/redacted 0 ; ready.                    */
 #else
@@ -158,7 +168,7 @@ int main(int argc,char*argv[])
 /*  (void) sprintf(line,"112 %s %s %s %d ready.",                     */
 /*  (void) sprintf(line,"222 %s %s %s %d ; ready.",                // */
 /* 222 ibmisv.marist.edu UFT/2 VMCMSUFT/1.10.5 ; ready.               */
-/*              temp,UFT_PROTOCOL,UFT_VERSION,BUFSIZ);             // */
+/*              temp,UFT_PROTOCOL,UFT_VERSION,UFT_BUFSIZ);         // */
 
     p = line;
     while (*p != 0x00 && *p != ' ') p++;    /* skip past message code */
@@ -224,10 +234,32 @@ int main(int argc,char*argv[])
             /* q2 now points to the args (if any), and p2 to metaverb */
 
 /* FIXME: we need a safety scan both here and "traditional" (below)   */
+/* the following are explicitly okay:
+    CLASS
+    COPY
+    DATE
+    DEST
+    DIST
+    FCB
+    FORM
+    GROUP
+    HOLD
+    NAME
+    NOTIFY
+    OWNER
+    RECFMT
+    RECLEN
+    SEQ
+    TITLE
+    UCS
+    VERSION
+    XDATE
+    XPERM
+ */
 
 /*          if (abbrev("NAME",p,2)) ... then put it into the struct   */
 
-            /*  put this variable into the control file  */
+            /* put this variable into the control file (sans "META_") */
             (void) sprintf(temp,"%s='%s'",p2,q2);
             if (tf >= 0) (void) uftx_putline(tf,temp,0);   /* logging */
             if (cf >= 0) (void) uftx_putline(cf,temp,0);
@@ -265,13 +297,13 @@ int main(int argc,char*argv[])
                 if (tf >= 0) (void) uftx_putline(tf,temp,0);
                 if (cf >= 0) (void) uftx_putline(cf,temp,0); }
 
-/* FIXME: if AUTH=AGENT then parse more and check it
-//              if (strcasecmp(auth,"AGENT") == 0)
-//                { for (p = q; *q > ' '; q++);
-//                  if (*q != 0x00) *q++ = 0x00;
-//                  if (*p != 0x00)
-//                  uftd_agck(,p,)
-//                }                                                   */
+/* FIXME: if AUTH=AGENT then parse more and check it                  */
+/*              if (strcasecmp(auth,"AGENT") == 0)                 // */
+/*                { for (p = q; *q > ' '; q++);                    // */
+/*                  if (*q != 0x00) *q++ = 0x00;                   // */
+/*                  if (*p != 0x00)                                // */
+/*                  uftd_agck(,p,)                                 // */
+/*                }                                                // */
 
             else (void) strncpy(auth,"N/A",256);
 
@@ -283,7 +315,10 @@ int main(int argc,char*argv[])
         /* --------------------------------------------- EXIT command */
         /* --------------------------------------------- QUIT command */
         if (abbrev("EXIT",p,2) || abbrev("QUIT",p,3))
-          { (void) seteuid(0);
+          {
+#ifdef UFT_POSIX
+ (void) seteuid(0);
+#endif
             if (df >= 0 && cf >= 0) unlink(tffn);       /* QUIT, EXIT */
             break; }         /* "221 goodbye" follows outside of loop */
 
@@ -301,15 +336,20 @@ int main(int argc,char*argv[])
             (void) tcpputs(1,"114 HELP: TYPE <filetype>");
             (void) tcpputs(1,"114 HELP: NAME <filename>");
             (void) tcpputs(1,"114 HELP: DATA <burst_size>");
+            (void) tcpputs(1,"114 HELP: EOF");
             (void) tcpputs(1,"114 HELP: QUIT");
             (void) tcpputs(1,"214 HELP: end of HELP");
             continue;                           /* continue after ACK */
           }
 
+        /* --------------------------------------------- NOOP command */
+        if (abbrev("NOOP",p,2) || abbrev("NOP",p,3))
+          { (void) tcpputs(1,"200 ACK");      /* do nothing, then ACK */
+            rc = 0; continue; }                 /* continue after ACK */
+
         /* --------------------------------------------- USER command */
         if (abbrev("USER",p,1))
-          { /* one at a time, please */
-            if (user[0] != 0x00)
+          { if (user[0] != 0x00)             /* one at a time, please */
               { (void) sprintf(temp,"403 protocol sequence error.");
                 (void) uftdstat(1,temp);  /* signal 4xx NAK to client */
                 continue; }                 /* continue after 4xx NAK */
@@ -346,12 +386,19 @@ int main(int argc,char*argv[])
             /* get the next sequence number for this user */
             n = uftdnext();
             if (n < 0 && errno == EACCES)
-              { (void) seteuid(0);
+              {
+#ifdef UFT_POSIX
+ (void) seteuid(0);
+#endif
                 n = uftdnext(); }
             if (n < 0)
               { (void) sprintf(temp,
+#ifdef UFT_POSIX
                           "527 user slot error UID=%d EUID=%d ERRNO=%d",
                                getuid(),geteuid(),errno);
+#else
+                          "527 user slot error");
+#endif
                 (void) uftdstat(1,temp);  /* signal 5xx NAK to client */
 #ifdef _UFT_DEBUG
     fprintf(stderr,"UFTD: 527 user slot error %d\n",n);
@@ -366,7 +413,7 @@ int main(int argc,char*argv[])
             (void) uftdstat(1,temp);                   /* spontaneous */
 #endif
 
-            /* now open the *real* control file (meta file) */
+            /* now open the *real* control file (the metadata file)   */
             (void) sprintf(cffn,"%04d.cf",n);
             (void) sprintf(wffn,"%04d.wf",n);
             cf = open(wffn,O_WRONLY|O_CREAT,S_IRUSR);
@@ -380,9 +427,11 @@ int main(int argc,char*argv[])
                 continue; }          /* return cf; ** should be errno */
 
             /* belt and suspenders: chown meta file for AIX */
+#ifdef UFT_POSIX
 /*          (void) chown(cffn,uuid);    */
 /*          (void) chown(wffn,uuid);    */
             (void) chown(wffn,uuid,UFT_GID);
+#endif
             /* and move previously stored statements into it */
             (void) uftdmove(cf,tf);
 
@@ -391,37 +440,38 @@ int main(int argc,char*argv[])
             df = open(dffn,O_WRONLY|O_CREAT,S_IRUSR);
             if (df < 0)
               { (void) sprintf(temp,
-                        "535 %d; user data file error.",errno);
-/*                          FIXME: register this in the messages file */
+                        "551 %d; user data file error.",errno);
                 (void) uftdstat(1,temp);  /* signal 5xx NAK to client */
-                (void) close(cf);       (void) close(tf);
+                (void) close(cf); (void) close(tf);
 #ifdef _UFT_DEBUG
-    fprintf(stderr,"UFTD: 535 user data file error\n");
+    fprintf(stderr,"UFTD: 551 user data file error\n");
 #endif
-                continue; }          /* return df; ** should be errno */
+                rc = 551; continue; }          /* return 551 or errno */
 
             /* belt and suspenders: chown data file for AIX */
+#ifdef UFT_POSIX
 /*          (void) chown(dffn,uuid);    */
             (void) chown(dffn,uuid,UFT_GID);
+#endif
 
             /* open AUX data file (extended attr or "resource fork")  */
             (void) sprintf(effn,"%04d.ef",n);
             ef = open(effn,O_WRONLY|O_CREAT,S_IRUSR);
             if (ef < 0)
               { (void) sprintf(temp,
-                        "535 %d; user auxdata file error.",errno);
-/*                          FIXME: register this in the messages file */
+                        "555 %d; user auxdata file error.",errno);
                 (void) uftdstat(1,temp);  /* signal 5xx NAK to client */
-                (void) close(cf);       (void) close(tf);
-                (void) close(df);
+                (void) close(cf); (void) close(tf); (void) close(df);
 #ifdef _UFT_DEBUG
-    fprintf(stderr,"UFTD: 535 user auxdata file error\n");
+    fprintf(stderr,"UFTD: 555 user auxdata file error\n");
 #endif
-                continue; }          /* return ef; ** should be errno */
+                rc = 555; continue; }          /* return 555 or errno */
 
             /* belt and suspenders: chown file for AIX */
+#ifdef UFT_POSIX
 /*          (void) chown(effn,uuid);    */
             (void) chown(effn,uuid,UFT_GID);
+#endif
 
             /* all okay! */
             (void) sprintf(temp,"208 %s; user %s okay",user,user);
@@ -444,12 +494,12 @@ int main(int argc,char*argv[])
             if (i < 0)
               { (void) sprintf(temp,"513 %d; server data error.",errno);
                 (void) uftdstat(1,temp);  /* signal 5xx NAK to client */
-                (void) close(df);
-                (void) close(cf);
+                (void) close(ef); (void) close(df); (void) close(cf);
+                cf = df = ef = -1;
 #ifdef _UFT_DEBUG
     fprintf(stderr,"UFTD: 513 server data error\n");
 #endif
-              continue; } /* return n; ** should be errno */
+              continue; }             /* return n; ** should be errno */
 
             (void) sprintf(temp,"213 %d; received %d bytes of data.",i,i);
             (void) uftdstat(1,temp);       /* ACK -- stat and logging */
@@ -472,6 +522,7 @@ int main(int argc,char*argv[])
               { (void) sprintf(temp,"513 %d; server data error.",errno);
                 (void) uftdstat(1,temp);  /* signal 5xx NAK to client */
                 (void) close(ef); (void) close(df); (void) close(cf);
+                cf = df = ef = -1;
 #ifdef _UFT_DEBUG
     fprintf(stderr,"UFTD: 513 server data error\n");
 #endif
@@ -493,9 +544,11 @@ int main(int argc,char*argv[])
             (void) rename(wffn,cffn);
 
             /* belt and suspenders for AIX: chown the user files      */
+#ifdef UFT_POSIX
             (void) chown(cffn,uuid,UFT_GID);
             (void) chown(dffn,uuid,UFT_GID);
             (void) chown(effn,uuid,UFT_GID);
+#endif
 
             /* and clear filenames */
             effn[0] = 0x00;  dffn[0] = 0x00;
@@ -509,7 +562,9 @@ int main(int argc,char*argv[])
 /*          (void) uftdlmsg(user,seqs,from,type);           // SYSLOG */
             (void) uftdlist(atoi(seqs),from);             /* ala 'ls' */
 
+#ifdef UFT_POSIX
             seteuid(0);                      /* go back to being root */
+#endif
             uftd_fann(user,seqs,from);       /* this is a better IMSG */
 
             /* now lose the spoolid number and clear username         */
@@ -559,7 +614,9 @@ int main(int argc,char*argv[])
             /* now lose the spoolid number, clear user, reset eUID    */
             n = -1;                    /* now lose the spoolid number */
             user[0] = 0x00;           /* now reset the user value ... */
+#ifdef UFT_POSIX
             (void) seteuid(0);       /* ... and go back to being root */
+#endif
 
             /* get back into the UFT spool directory */
             if (chdir(UFT_SPOOLDIR) < 0) break;   /* FIXME: should be 5xx */

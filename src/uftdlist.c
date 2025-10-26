@@ -1,6 +1,6 @@
 /* Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
  *
- *        Name: uftdlist.c
+ *        Name: uftdlist.c (C program source)
  *              list a network file after arrival
  *      Author: Rick Troth, Decatur, Alabama, USA
  *        Date: 1995-Nov-22
@@ -19,6 +19,15 @@
 #include        <fcntl.h>
 #include        <sys/stat.h>
 #include        <time.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+ #include <winsock2.h>
+#else
+ #include <sys/socket.h>
+ #include <netdb.h>
+ #include <pwd.h>
+ #include <errno.h>
+#endif
 
 #include        "uft.h"
 

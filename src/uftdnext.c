@@ -1,6 +1,6 @@
 /* Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
  *
- *        Name: uftdnext.c
+ *        Name: uftdnext.c (C program source)
  *              Unsolicited File Transfer daemon "next" routine
  *              returns next available SEQuence number
  *
@@ -12,6 +12,13 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdlib.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+ #include <winsock2.h>
+#else
+ #include <sys/socket.h>
+ #include <netdb.h>
+#endif
 
 #include "uft.h"
 

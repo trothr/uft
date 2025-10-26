@@ -12,6 +12,5 @@ service ufts
         protocol        = tcp
         wait            = no
         user            = root
-#       server          = /usr/sbin/uftd
         server          = /usr/libexec/uftd
 }

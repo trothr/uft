@@ -1,6 +1,6 @@
 * © Copyright 1993-2025 Richard M. Troth, all rights reserved. <plaintext>
 *
-*         Name: UFTUME MESSAGES
+*         Name: UFTUME MESSAGES or uft.msgs
 *       Author: Rick Troth, Houston, Texas, USA
 *         Date: 1993-Apr-18, Jul-01, 1994-May-18, 1995-Mar-07
 *
@@ -29,7 +29,7 @@
 0000      2.0
 0001      UFT/2.0 client (CMS)
 0002      UFT/2.0 server (z/VM)
-0003    E Invalid option: &1
+0003    E invalid option &1
 0004      UFT/&1
 0005      UFT/&1 client
 0006      UFT/&1 server
@@ -42,19 +42,56 @@
 0013      UFT/redacted
 *014    X ........
 *
+*304    E Invalid operand value &1
+*384    E Missing modifier keyword(s).
+*385    E Invalid modifier keyword: &1
+*386    E Missing operand(s).                                      >> 16
+*387    E Missing value for &1 operand
+*388    E Invalid keyword: &1
+*389    E Invalid operand: &1
+*390    E Invalid value &1 for &2 operand
+*391    E Unexpected operand(s): &1
+*393    E Missing value for &1 option
+*394    E Invalid option: &1
+*395    E Invalid value &1 for &2 option
+*
   15    E Unknown &1 command
   16    E Missing operand(s)
+  22    E file &1 not found
+  26    E socket or stream closed without a QUIT command
   42    E User &1 spoolid &2 does not exist
+  45    E protocol sequence error
   50    E Invalid spoolid &1
   53    E &1 not in CP directory
   54    E Incomplete fileid specified
   70    E Invalid parameter &1
+  81    E &1 command not supported in batch mode
+  90    E Invalid value &1 for &2 parameter
   92    I File (&1) spooled to &2 -- origin &3(&4) &5 &6 &7
-  93      File &1 received from &2 sent as &3
+  93    I File &1 received from &2 sent as &3
   94    I File &1 spooled to &2 origin &3
-  95      Note &1 received from &2
+  95    I Note &1 received from &2
   96    I From &1(&2): &3
   97    I From &1: &2
+*395    E Invalid value &1 for &2 option
+*116    E Invalid value &1 for &2 in &3
+
+#  There is no logmsg data
+*507    E No preserved data to restore
+
+
+*   HCP002E Invalid operand - operand
+*   HCP003E Invalid option - command contains extra option(s) starting with operand
+*   HCP007E Invalid userid - userid
+*   HCP026E Operand missing or invalid
+*   HCP041E LOGMSG nn does not exist.
+*   HCP1506E The last line (50) in the log message is already in use.
+*   HCP6704E Missing token at end of line
+*   HCP6706E Invalid {group name|account ID} - {groupname|accountid}
+*   HCP6734E Support for file-based LOGMSG is not enabled.
+*   HCP6771E LOGMSG support based on {Account ID|ACI group|Userid} is not enabled.
+
+
 *
 * spontaneous info messages (including deprecated UFT/1 herald)
 0100      100 &1 UFT/1 VMCMSUFT/1.2.2 ready.
@@ -65,8 +102,7 @@
 0112      112 &1 UFT/1 POSIXUFT/&3 &4 ready.
 0113      113 SEND &1 bytes of data.
 *         (for SEND, recommend 313 below)
-0114      114 HELP follows:
-*214  02  114-End of HELP.
+0114      114 HELP:
 0115      115 &1 system type.
 0118      118 SEQ=&1 (server)
 0119      119 SEQ=&1 (user)
@@ -116,10 +152,10 @@
 0200      200 ACK
 0201      201 Command okay.
 0202      202 Command not implemented, superfluous at this site.
-0208      208 user &1 okay
+0208      208 &1; user &1 okay
 0211      211 System status, or system help reply.
 0213      213 received &1 bytes of data.
-0214      214 End of HELP.
+0214      214 HELP: end of HELP
 0216      216 ABORT/ROLLBACK
 0225      225 Data connection already open; transfer starting.
 0226      226 ABORT/ROLLBACK
@@ -130,6 +166,7 @@
 0222      222 &1 UFT/2 VMCMSUFT/&3 &4 ; ready.
 0223      223 &1 UFT/2 POSIXUFT/&3 &4 ; ready.
 0224      224 *anonymous UFT/2 UFT/redacted 0 ; ready.
+0225      225 &1 UFT/2 &3 &4 ; ready.
 0230      230 Local username okay, proceed.
 0250      250 Requested file action okay, completed.
 *
@@ -154,7 +191,7 @@
 *421      421 (see 521)
 0426      426 Connection closed; transfer aborted.
 *432      432 No such local user &1
-0433    E 433 Invalid option &1
+0433    E 433 invalid option &1
 0449      449 protocol sequence error
 *450      450 Requested file action pending further information.
 0470    E 470 Invalid parameter &1
@@ -182,8 +219,6 @@
 0533      533 server temp file error
 0534      534 user meta file error.
 0535    T 535 This server is not in the required VM CP environment.
-*   fprintf(stderr,"UFTD: 535 user data file error\n");
-*   fprintf(stderr,"UFTD: 535 user auxdata file error\n");
 0536      536 No entries were found that matched your search criteria
 0541      541 server data error (user over quota)
 0542    E 542 This server lacks the privilege class for MSGTYPE MSGNOH.
@@ -192,9 +227,10 @@
 0548    E 548 Userid &1 not found; check the &2 NAMES file
 0549      549 workspace sequence error
 0550    E 550 &1 ; &1 ... User unknown
-0551      551 server data file error
+0551    E 551 &1 ; server data file error &1
 0552      552 spool directory unavailable
 0553    E 553 &1 ; &1 not in CP directory
+0555    E 555 &1 ; user auxdata file error &1
 0557      557 &1 not receiving
 0559      559 server data error (physical space)
 0567    E 567 User &1 is not enrolled
@@ -205,11 +241,27 @@
 *
  999      © Copyright 1995, 1997, 2025 Richard M. Troth, all rights reserved.
 *
+1049    E Unable to connect to remote UFT server &1
+*
 * from the CMS implementation:
 1200    E Code level mis-match: expected &1 but found &2
+
+*2000 range
+
+*3000 range
+
+*4000 reserved range
+
+*5000 reserved range
+
+*6000 reserved range
+
+*7000 reserved range
+
 8416      From &1(&2): &3
 8712      File &1 sent to &2 at &3 on &4
 *DMTNTR147I Sent file 0716 (1995) on link NYNJGATE to NEWYORK(MATTHEW)
+
 *
 * TAG on the file for RDRLIST and RECEIVE:
 *         FILE (*UFT) ORIGIN host from date time tz
@@ -220,7 +272,7 @@
 *         File (*UFT) spooled to user -- origin host(from) date time tz
 *002      File (*UFT) spooled to &1 -- origin &2(&3) &4 &5 &6
 9002      File (&1) spooled to &2 -- origin &3(&4) &5 &6 &7
-1004      File &1 spooled to &2 origin &3
+*1004     File &1 spooled to &2 origin &3
 *DMTNTR147I Sent file 0716 (1995) on link NYNJGATE to NEWYORK(MATTHEW)
 *
 * the following is for SIFT-via-MIME and should be renumbered lower
@@ -241,10 +293,7 @@
 9824      X-SIFT/datafile
 9825      X-SIFT/auxdata
 *
-9999      © Copyright 1995, 1997, 2025 Richard M. Troth, all rights reserved.
 *
-* for 386 go to 16
-*385    E Invalid modifier keyword: &1
 *740    I Execution begins...
 *440    E RXSOCKET requires TCPIP Version 2 or higher               1440
 *606    E No primary input specified                                1606

@@ -1,6 +1,6 @@
-/* © Copyright 1995, Richard M. Troth, all rights reserved.  <plaintext>
+/* © Copyright 1995-2025, Richard M. Troth, all rights reserved.  <plaintext>
  *
- *        Name: tcpiolib.c
+ *        Name: tcpio.c (C program source)
  *              various TCP utility functions
  *      Author: Rick Troth, Houston, Texas, USA
  *        Date: 1995-Apr-19
@@ -17,11 +17,16 @@
  *
  */
 
+#if defined(_WIN32) || defined(_WIN64)
+ #include <winsock2.h>
+#else
+ #include <sys/socket.h>
+ #include <netdb.h>
+#endif
+
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <stdio.h>
-#include <netdb.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -31,7 +36,6 @@
 #define         TCPLARGE        4096
 
 int     tcp_ubuf[TCPLARGE];
-int     tcp_uoff, tcp_uend;
 char    tcp_umsg[TCPSMALL];
 
 /* if we're on IBM OpenVM, define OECS */
@@ -49,7 +53,7 @@ char    tcp_umsg[TCPSMALL];
 #endif
 
 /* ------------------------------------------------------------- TCPOPEN
- *  Tries to mimick  open(path,flags[,mode])
+ *  Tries to mimick open(path,flags[,mode])
  *  but connects to a TCP port,  not a local file.
  */
 int tcpopen(char*host,int flag,int mode)
@@ -59,6 +63,18 @@ int tcpopen(char*host,int flag,int mode)
     struct hostent *hent, myhent;
     char       *myhental[2], myhenta0[4], myhenta1[4];
     char        temp[TCPSMALL], *p, *q;
+
+
+
+#if defined(_WIN32) || defined(_WIN64)
+    WSADATA wsa;
+    rc = WSAStartup(MAKEWORD(2,2),&wsa);
+    if (rc != 0) {
+        fprintf(stderr,"Windows socket subsytsem could not be initialized.\n");
+        fprintf(stderr,"Error Code: %d. Exiting..\n", WSAGetLastError());
+        return -1; }
+#endif
+
 
     /*  parse host address and port number by colon  */
     p = host; host = temp; i = 0;
@@ -179,13 +195,15 @@ int tcpclose(int fd)
  *              into buffer b.  Returns the length of that string.
  *      Author: Rick Troth, Houston, Texas, USA
  *        Date: 1995-Apr-19
+ *              2025-09-03 for Windoze
+ *     Returns: length of string or negative on error
  *
  *    See also: getline.c, putline.c
  */
 int tcpgets(int s,char*b,int l)
   { static char _eyecatcher[] = "tcpgets()";
     char       *p;
-    int         i;
+    int         i, rc;
 
 #ifdef  OECS
     char        snl;
@@ -194,9 +212,11 @@ int tcpgets(int s,char*b,int l)
 
     p = b;
     for (i = 0; i < l; i++)
-      {
-        if (read(s,p,1) != 1)           /*  get a byte  */
-        if (read(s,p,1) != 1) return -1;/*  try again  */
+      { rc = read(s,p,1); if (rc != 1)                  /* get a byte */
+        rc = recv(s,p,1,0); if (rc != 1)                  /* Win hack */
+        rc = read(s,p,1); if (rc != 1)                   /* try again */
+        rc = recv(s,p,1,0); if (rc != 1) return -1;       /* Win hack */
+        /* above worked fine with read() til Windows demanded recv()  */
         switch (*p)
           {
 #ifdef  OECS
@@ -231,8 +251,6 @@ int tcpgets(int s,char*b,int l)
         *p = 0x00;      /*  remove trailing CR  */
       }
 
-    tcp_uoff = 0;
-    tcp_uend = 0;
     return i;
   }
 
@@ -268,8 +286,10 @@ int tcpputs(int s,char*b)
     temp[i+1] = '\n';
 #endif
 
-    /*  write entire string, WITH line interpolation,  at once  */
+    /* write entire string, WITH line interpolation, at once          */
     j = write(s,temp,i+2);
+    if (j < 0) j = send(s,temp,i+2,0);
+    /* above worked fine with write() until Windows demanded send()   */
 
     if (j != i+2) return -1;
     return i;
@@ -279,14 +299,26 @@ int tcpputs(int s,char*b)
  */
 int tcpwrite(int fd,char*s,int n)
   { static char _eyecatcher[] = "tcpwrite()";
-    return write(fd,s,n);
+    int rc;
+
+    rc = write(fd,s,n);
+    if (rc < 0) rc = send(fd,s,n,0);
+    /* above worked fine with write() until Windows demanded send()   */
+
+    return rc;
   }
 
 /* ------------------------------------------------------------- TCPREAD
  */
 int tcpread(int fd,char*s,int n)
   { static char _eyecatcher[] = "tcpread()";
-    return read(fd,s,n);
+    int rc;
+
+    rc = read(fd,s,n);
+    if (rc < 0) recv(fd,s,n,0);
+    /* above worked fine with read() until Windows demanded recv()    */
+
+    return rc;
   }
 
 /* ------------------------------------------------------------ TCPIDENT
@@ -326,10 +358,6 @@ int tcpident(int sock,char*buff,int size)
     int         plcl, prmt;
     char       *p;
 
-/*
-(void) netline(2,">>>>>>>>");
- */
-
     /*  preload a few storage areas  */
     host[0] = 0x00;
     user[0] = 0x00;
@@ -338,10 +366,7 @@ int tcpident(int sock,char*buff,int size)
     slen = sizeof(sadr);
     rc = getsockname(sock,&sadr,&slen);
     if (rc != 0)
-      {
-/*
-        (void) perror("getsockname()");
- */
+      { /* perror("getsockname()"); */
         if (rc < 0) return rc;
                 else return -1;
       }
@@ -370,10 +395,7 @@ int tcpident(int sock,char*buff,int size)
     slen = sizeof(sadr);
     rc = getpeername(sock,&sadr,&slen);
     if (rc != 0)
-      {
-/*
-        (void) perror("getpeername()");
- */
+      { /* perror("getpeername()"); */
         if (rc < 0) return rc;
                 else return -1;
       }
@@ -404,10 +426,7 @@ int tcpident(int sock,char*buff,int size)
     /*  what host is at that address?  */
     hent = gethostbyaddr(hadd,slen,styp);
     if (hent == NULL)
-      {
-/*
-        (void) perror("gethostbyaddr()");
- */
+      { /* perror("gethostbyaddr()"); */
         if (rc < 0) return rc;
                 else return -1;
       }
@@ -453,14 +472,10 @@ int tcpident(int sock,char*buff,int size)
 
     (void) sprintf(buff,"%s@%s",user,host);
 
-/*
-(void) netline(2,"<<<<<<<<");
- */
-
     return 0;
   }
 
-/* include the following code only if supporting IBM OpenEdition */
+/* include the following code only if supporting IBM OpenEdition/USS  */
 #ifdef          OECS
 #include        "aecs.h"
 
