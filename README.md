@@ -7,7 +7,7 @@ but rather that the recipient did not fetch the file
 and the sender might not have sign-on credentials on the target host.
 
 A better expansion of the acronym might be <br/>
-Universal File Transfer (a name with less baggage) <br/>
+*Universal* File Transfer (a name with less baggage) <br/>
 There is also the title "Sender-Initiated File Transfer" or SIFT,
 which usually refers to an offline or batch variant of the protocol.
 
@@ -16,6 +16,8 @@ This project has been moved and now lives at
 https://github.com/trothtech/uft/
 
 The new repository has both POSIX and VM/CMS components.
+
+You really should be looking to the other repository, not here.
 
 ## README for POSIX UFT
 
