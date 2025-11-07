@@ -9,8 +9,8 @@ a high degree of anonymity and confidentiality when using UFT.
 
 Note that this only applies to the *server*.
 Rendering connections safe from the client side alone is difficult.
-But with a properly configured hidden/anonymized UFT server
-the client can easily participate.
+But with a properly configured hidden/anonymized UFT server the client
+ can easily participate. See below for proxy client operation.
 
 ## Start with Standard UFT
 
@@ -63,5 +63,18 @@ run `ufta` on TCP port 1608 just like you would run `uftd` on port 608.
 (You should also restrict port 1608 to local service only, if possible.)
 
 UFTA is simply "UFT Anonymous".
+
+## Anonymous Mode Client
+
+The UFT client `sf` has built-in proxy support. <br/>
+If you are running Tor locally, you can use its proxy service
+to connect with UFT servers via Tor, including .onion hosts.
+
+    sf --proxy 'nc -x 127.0.0.1:9050 %h %p' *file* user@host
+
+Here we use the netcat command `nc` to run the UFT transaction
+through the local Tor service. Target UFT recipients can be either
+standard Internet hosts (but seen as coming from a Tor exit node)
+or can be .onion hosts (Tor hidden services, seen as local there).
 
 

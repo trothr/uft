@@ -17,7 +17,7 @@ https://github.com/trothtech/uft/
 
 The new repository has both POSIX and VM/CMS components.
 
-You really should be looking to the other repository, not here.
+You *really* should be looking to the other repository, not here.
 
 ## README for POSIX UFT
 
