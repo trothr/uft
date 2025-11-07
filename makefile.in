@@ -1,32 +1,66 @@
-# © Copyright 1995, Richard M. Troth, all rights reserved.   <plaintext>
+# Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
 #
-#	  Name: .../posixuft/src/makefile.in
-#		make file source for UFTD and UFTC (Internet SENDFILE)
-#		to be modified by 'configure' and written as "makefile"
-#	  Date: 1995-Jan-10, Oct-05, 1997-Feb-02, 2024-03-17
+#         Name: .../posixuft/src/makefile.in
+#               make file source for UFTD and UFTC (Internet SENDFILE)
+#               to be modified by 'configure' and written as "makefile"
+#         Date: 1995-Jan-10, Oct-05, 1997-Feb-02, 2024-03-17
+#         Note: this makefile configured for %SYSTEM%
 #
 
-LDFLAGS 	=	%LDFLAGS%
-LIBS		=	%LIBS%
-CFLAGS		=	%CFLAGS%
-PREFIX		=	%PREFIX%
+APPLID          =       uft
+VERSION         =       2.0.12
+DELIVERABLES    =       sf rls rcv rstat rrm uftcndd tell cpq \
+                        uftd uftxdspl uftctcp2
+
+SOURCEURL       =       https://raw.githubusercontent.com/trothtech/uft/refs/heads/main
+#                       https://raw.githubusercontent.com/trothtech/uft/master
+
+##### configuration #####
+
+PREFIX          =       %PREFIX%
+LDFLAGS         =       %LDFLAGS%
+LIBS            =       %LIBS%
+CFLAGS          =       %CFLAGS% -DPREFIX=\"$(PREFIX)\"
+SHFLAGS         =       %SHFLAGS%
+# we may later use CC, CXX, CPP, CPPFLAGS, and/or CXXFLAGS
+
+LOCDIR          =       %LOCDIR%
+LOCALE          =       %LOCALE%
 
 .PHONY: 	clean distclean config help
 
-all:		uftd sf maketext cpq cpqu \
-			tell msgpipe msgcat msgd
+all:		$(DELIVERABLES)
+#		maketext cpq cpqu msgpipe msgcat msgd
 
 uftd:		makefile uftd.o \
-			uftdnext.o uftddata.o uftduser.o \
-			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o \
-			getline.o putline.o abbrev.o tcpio.o aecs.o
-		$(CC) $(CFLAGS) -o uftd uftd.o \
-			uftdnext.o uftddata.o uftduser.o \
-			uftdmove.o uftdimsg.o uftdlmsg.o uftdlist.o \
-			getline.o putline.o abbrev.o tcpio.o aecs.o $(LIBS)
+			uftddata.o \
+			uftduser.o \
+			uftdmove.o \
+			uftdimsg.o \
+			uftdlist.o \
+			uftdcpq.o \
+			abbrev.o \
+			tcpio.o \
+			aecs.o \
+			uftlib.o \
+			xmitmsgx.o
+		$(CC) $(LDFLAGS) -o uftd \
+			uftd.o \
+			uftddata.o \
+			uftduser.o \
+			uftdmove.o \
+			uftdimsg.o \
+			uftdlist.o \
+			uftdcpq.o \
+			abbrev.o \
+			tcpio.o \
+			aecs.o \
+			uftlib.o \
+			xmitmsgx.o \
+			$(LIBS)
 
-uftdnext.o:	makefile uft.h uftdnext.c
-		$(CC) $(CFLAGS) -c uftdnext.c
+#uftdnext.o:	makefile uft.h uftdnext.c
+#		$(CC) $(CFLAGS) -c uftdnext.c
 
 uftddata.o:	makefile uft.h uftddata.c
 		$(CC) $(CFLAGS) -c uftddata.c
@@ -40,35 +74,43 @@ uftdmove.o:	makefile uft.h uftdmove.c
 uftdimsg.o:	makefile uft.h uftdimsg.c
 		$(CC) $(CFLAGS) -c uftdimsg.c
 
-uftdlmsg.o:	makefile uft.h uftdlmsg.c
-		$(CC) $(CFLAGS) -c uftdlmsg.c
+#uftdlmsg.o:	makefile uft.h uftdlmsg.c
+#		$(CC) $(CFLAGS) -c uftdlmsg.c
 
 uftdlist.o:	makefile uft.h uftdlist.c
 		$(CC) $(CFLAGS) -c uftdlist.c
 
+uftdcpq.o:	makefile uft.h uftdcpq.c
+		$(CC) $(CFLAGS) -o uftdcpq.o \
+				-c uftdcpq.c
+
 uftd.o: 	makefile uft.h uftd.c
-		$(CC) $(CFLAGS) -c uftd.c
+		$(CC) $(CFLAGS) -o uftd.o \
+				-c uftd.c
 
 sf:		makefile uftc.o \
-			uftcwack.o uftctext.o uftcprot.o \
-			tcpio.o getline.o putline.o \
-			userid.o aecs.o readspan.o
-		$(CC) $(CFLAGS) -o sf uftc.o \
-			uftcwack.o uftctext.o uftcprot.o \
-			tcpio.o getline.o putline.o \
-			userid.o aecs.o readspan.o $(LIBS)
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o
+		$(CC) $(LDFLAGS) -o sf \
+			uftc.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o \
+			$(LIBS)
 
 uftc.o: 	makefile uft.h uftc.c
 		$(CC) $(CFLAGS) -c uftc.c
 
-uftcwack.o:	makefile uft.h uftcwack.c
-		$(CC) $(CFLAGS) -c uftcwack.c
+#uftctext.o:	makefile uft.h uftctext.c
+#		$(CC) $(CFLAGS) -c uftctext.c
 
-uftctext.o:	makefile uft.h uftctext.c
-		$(CC) $(CFLAGS) -c uftctext.c
-
-uftcprot.o:	makefile uft.h uftcprot.c
-		$(CC) $(CFLAGS) -c uftcprot.c
+#uftcprot.o:	makefile uft.h uftcprot.c
+#		$(CC) $(CFLAGS) -c uftcprot.c
 
 uftcnote.h:	makefile uftcnote.txt
 		cat uftcnote.txt > uftcnote.tmp
@@ -81,62 +123,122 @@ uftcnote.h:	makefile uftcnote.txt
 		echo "\"\"};" >> uftcnote.h
 
 uftcmime:	makefile uftcmime.c uftcnote.h
-		$(CC) $(CFLAGS) -o uftcmime uftcmime.c $(LIBS)
+		$(CC) $(CFLAGS) -o uftcmime \
+			uftcmime.c $(LIBS)
 
-maketext:	makefile maketext.o getline.o putline.o tcpio.o aecs.o
+uftcndd:	makefile uftcndd.c uft.h
+		$(CC) $(CFLAGS) -o uftcndd \
+			uftcndd.c $(LIBS)
+
+maketext:	makefile maketext.o tcpio.o aecs.o
 		$(CC) $(CFLAGS) -o maketext \
-			maketext.o getline.o putline.o tcpio.o aecs.o $(LIBS)
+			maketext.o \
+			tcpio.o \
+			aecs.o \
+			$(LIBS)
 
-cpq:		makefile cpq.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o
-		$(CC) $(CFLAGS) -o cpq cpq.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o $(LIBS)
+cpq:		makefile cpq.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o
+		$(CC) $(LDFLAGS) -o cpq \
+			cpq.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o \
+			$(LIBS)
 
-cpqu:		makefile cpqu.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o
-		$(CC) $(CFLAGS) -o cpqu cpqu.o uftcwack.o \
-			tcpio.o getline.o putline.o aecs.o $(LIBS)
+cpqu:		makefile cpqu.o \
+			tcpio.o \
+			aecs.o
+		$(CC) $(LDFLAGS) -o cpqu \
+			cpqu.o \
+			tcpio.o \
+			aecs.o \
+			$(LIBS)
+
+uftxdspl:       uftxdspl.o makefile \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o
+		$(CC) $(LDFLAGS) -o uftxdspl \
+			uftxdspl.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o \
+			$(LIBS)
+
+uftxdspl.o:     uftxdspl.c uft.h makefile
+		$(CC) $(CFLAGS) -o uftxdspl.o \
+				-c uftxdspl.c
+
+uftctcp2:       uftctcp2.o makefile \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o
+		$(CC) $(LDFLAGS) -o uftctcp2 \
+			uftctcp2.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o \
+			$(LIBS)
+
+uftctcp2.o:     uftctcp2.c uft.h makefile
+		$(CC) $(CFLAGS) -o uftctcp2.o \
+				-c uftctcp2.c
 
 clean:
 		rm -f core a.out *.o *.a *.lst CEEDUMP.* \
 			uftd sf maketext cpq cpqu uftcmime \
-			tell msgpipe msgcat msgd imsg
+			tell msgpipe msgcat msgd imsg uftcndd \
+			uftxdspl uftctcp2 ufta
+		sh -c ' cd xmitmsgx ; exec $(MAKE) clean '
 
 distclean:
 		rm -f core a.out *.o *.a *.lst CEEDUMP.* \
 			uftd sf maketext cpq cpqu uftcmime \
-			tell msgpipe msgcat msgd imsg \
-			*:* *';'* makefile Makefile
-
-#config:		makefile
-#		@sh -c ' : '
+			tell msgpipe msgcat msgd imsg uftcndd \
+			uftxdspl uftctcp2 ufta \
+			*:* *';'* makefile Makefile makefile.old \
+			uft.spec uft.dctl configure.sh configure.h \
+			*.rpm *.deb *.log .rpmseq
+		rm -rf rpmbuild.d debbuild.d
+		sh -c ' cd xmitmsgx ; exec $(MAKE) distclean '
 
 #makefile:	makefile.in configure
-#		./configure
+#		@echo "$(MAKE): makefile is out of synch"
+#		@echo "$(MAKE): you need to re-run ./configure"
+#		@false
 
 help:
-	@echo "$(MAKE):"
-	@echo "$(MAKE): this is the build logic for UFT, POSIX 'sendfile'"
-	@echo "$(MAKE):"
+		@echo "$(MAKE):"
+		@echo "$(MAKE): this is the build logic for UFT, POSIX 'sendfile'"
+		@echo "$(MAKE): targets include ..."
+		@echo "$(MAKE):         all, install, uft.rpm, uft.deb"
+		@echo "$(MAKE):"
 
 #
 #
 #
-
-getline.o:	makefile getline.c
-		$(CC) $(CFLAGS) -c getline.c
-
-putline.o:	makefile putline.c
-		$(CC) $(CFLAGS) -c putline.c
 
 abbrev.o:	makefile abbrev.c
 		$(CC) $(CFLAGS) -c abbrev.c
 
 tcpio.o:	makefile tcpio.c
-		$(CC) $(CFLAGS) -c tcpio.c
-
-userid.o:	makefile userid.c
-		$(CC) $(CFLAGS) -c userid.c
+		$(CC) $(CFLAGS) -o tcpio.o \
+				-c tcpio.c
 
 maketext.o:	makefile maketext.c
 		$(CC) $(CFLAGS) -c maketext.c
@@ -150,9 +252,24 @@ cpqu.o:		makefile cpqu.c
 aecs.o: 	makefile aecs.c aecs.h
 		$(CC) $(CFLAGS) -c aecs.c
 
-readspan.o: 	makefile readspan.c
-		$(CC) $(CFLAGS) -c readspan.c
+#readspan.o:	makefile readspan.c
+#		$(CC) $(CFLAGS) -c readspan.c
 
+xmitmsgx.o:
+	sh -c ' cd xmitmsgx ; exec $(MAKE) xmitmsgx.o '
+	cp -p xmitmsgx/xmitmsgx.o .
+
+uftlib.o:	makefile uft.h uftlib.c
+		$(CC) $(CFLAGS) -o uftlib.o \
+				-c uftlib.c
+
+anonymous:
+		$(CC) $(CFLAGS) -DUFT_ANONYMOUS -o uftd.o -c uftd.c
+		$(CC) $(CFLAGS) -DUFT_ANONYMOUS -o uftdcpq.o -c uftdcpq.c
+		$(CC) $(CFLAGS) -DUFT_ANONYMOUS -o uftduser.o -c uftduser.c
+		@rm -f uftd
+		$(MAKE) uftd
+		mv uftd ufta
 
 #
 #	  Name: makefile.in (make file source)
@@ -160,7 +277,6 @@ readspan.o: 	makefile readspan.c
 #	Author: Rick Troth, Houston, Texas, USA
 #	  Date: 1997-Mar-23 (Sun)
 #
-
 
 secure: 	default
 		chgrp msg tell msgd
@@ -170,27 +286,46 @@ msgcat: 	makefile msgpipe
 		rm -f msgcat
 		ln msgpipe msgcat
 
-msgpipe:	makefile msgpipe.o putline.o
-		$(CC) -o msgpipe msgpipe.o putline.o
-		strip msgpipe
+msgpipe:	makefile msgpipe.o
+		$(CC) -o msgpipe \
+			msgpipe.o
+#		strip msgpipe
 
-msgd:		makefile msgd.o msgdlmsg.o \
-			putline.o tcpio.o aecs.o homedir.o
-		$(CC) -o msgd msgd.o msgdlmsg.o \
-			putline.o tcpio.o aecs.o homedir.o
-		strip msgd
+msgd:		makefile msgd.o \
+			msgdlmsg.o \
+			tcpio.o \
+			aecs.o \
+			homedir.o
+		$(CC) -o msgd \
+			msgd.o \
+			msgdlmsg.o \
+			tcpio.o \
+			aecs.o \
+			homedir.o
+#		strip msgd
 
-tell:		makefile msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o \
-			homedir.o uftcwack.o
-		$(CC) -o tell msgc.o msgcmsp.o msgcuftd.o msglocal.o \
-			getline.o tcpio.o userid.o putline.o aecs.o \
-			homedir.o uftcwack.o
-		strip tell
+tell:		makefile msgc.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o
+	$(CC) $(LDFLAGS) -o tell \
+			msgc.o \
+			uftlib.o \
+			tcpio.o \
+			xmitmsgx.o \
+			aecs.o \
+			abbrev.o \
+			$(LIBS)
+#	strip tell
+# msgcmsp.o msgcuftd.o msglocal.o homedir.o
 
-imsg:		makefile imsg.o putline.o getline.o aecs.o
-		$(CC) -o imsg imsg.o putline.o getline.o aecs.o
-		strip imsg
+imsg:		makefile imsg.o aecs.o
+		$(CC) -o imsg \
+			imsg.o \
+			aecs.o
+#		strip imsg
 
 imsg.o: 	makefile uft.h imsg.c
 		$(CC) -c imsg.c
@@ -219,48 +354,71 @@ msgdlmsg.o:	makefile uft.h msgdlmsg.c
 homedir.o:	makefile homedir.c
 		$(CC) -c homedir.c
 
-#userid.o:	makefile userid.c
-#		$(CC) -c userid.c
+corral:		$(DELIVERABLES)
+		mkdir -p ${OUTBIN} > /dev/null
+		rm -fr *.o
+		rm -fr xmitmsgx/*.o
+		cp -p sf tell uftcndd uftd ${OUTBIN}
+		rm -f sf tell uftcndd uftd
 
-#tcpio.o:	makefile tcpio.c
-#		$(CC) -c tcpio.c
-
-#getline.o:	makefile getline.c
-#		$(CC) -c getline.c
-
-#putline.o:	makefile putline.c
-#		$(CC) -c putline.c
-
-#install:	sf cpq cpqu tell msgcat maketext msgpipe uftd msgd
+#install:	sf uftd cpq cpqu tell msgcat maketext msgpipe msgd
 #		mv sf cpq cpqu tell msgcat $(PREFIX)/bin/.
 #		mv maketext msgpipe $(PREFIX)/lib/.
 #		mv uftd msgd $(PREFIX)/sbin/.
-install:	sf uftd 
-		mkdir -p $(PREFIX)/bin $(PREFIX)/sbin $(PREFIX)/etc/xinetd.d
-		cp -p sf $(PREFIX)/bin/.
-		cp -p uftd $(PREFIX)/sbin/.
-#		cp -p uftd $(PREFIX)/libexec/.
+install:	$(DELIVERABLES)
+		mkdir -p $(PREFIX)/bin $(PREFIX)/etc/xinetd.d \
+			$(PREFIX)/share/locale/$(LOCALE) $(PREFIX)/libexec
+		cp -p sf rls rcv rstat rrm uftcndd tell cpq $(PREFIX)/bin/.
+		cp -p uftd uftxdspl uftctcp2 $(PREFIX)/libexec/.
 		cp -p uft.inet $(PREFIX)/etc/xinetd.d/uft
+		cp -p uft.msgs $(PREFIX)/share/locale/$(LOCALE)/.
 
-rpm:
-		rpm -bb uft.spec
-#		rpm -ba ?
-		new -d /usr/src/*/RPMS/*/uft-*.rpm .
+########################################################################
+# RPM support
 
+# http://ftp.rpm.org/max-rpm/s1-rpm-build-creating-spec-file.html
+uft.rpm:        uft.spec
+#		rpmbuild -bb --nodeps uft.spec
+		./rpmbuild.sh $(APPLID) $(VERSION)
+#		rpm -bb uft.spec
+##		rpm -ba ?
+#		new -d /usr/src/*/RPMS/*/uft-*.rpm .
 
-#Get yourself an easy source package, e.g. telnet-*-.src.rpm and do an
-# rpm -i telnet-*.src.rpm
-# cd /usr/src/redhat/SPECS  - see the  .spec  file
+#
+uft.spec:       uft.spec.in
+		@echo "$(MAKE): checking required variables"
+#		test ! -z "$(UNAMEM)" # UNAMEM
+#		test ! -z "$(RELEASE)" # RELEASE
+#		test ! -z "$(STAGING)" # STAGING
+		cat uft.spec.in \
+		  | sed 's#%SPEC_PREFIX%#$(PREFIX)#g' \
+		  | sed 's#%SPEC_APPLID%#$(APPLID)#g' \
+		  | sed 's#%SPEC_VERSION%#$(VERSION)#g' \
+		  | sed 's#%SPEC_RELEASE%#$(RELEASE)#g' \
+		  | sed 's#%SPEC_UNAMEM%#$(UNAMEM)#g' \
+		  | sed 's#%SPEC_STAGING%#$(STAGING)#g' \
+                  | sed 's#%SPEC_LOCDIR%#$(LOCDIR)#g' \
+                  | sed 's#%SPEC_LOCALE%#$(LOCALE)#g' \
+		  > uft.spec
 
-#Now the .spec file tells how to unpack, patch, configure, compile, etc.
-#And it tells what files go into the final deliverable, and what scripts
-#run at installation (or removal) time.
-#You can even do a 'rpm -ba telnet.spec' so it will build a new .src.rpm
-#file (assuming you did patches etc in it).
+#rpmbuild:
+#		rpm -bc --short-circuit uft.spec
 
-#Rob
+########################################################################
+# DEB support
+uft.deb:        uft.dctl
+		./debbuild.sh $(APPLID) $(VERSION)
 
-rpmbuild:
-		rpm -bc --short-circuit uft.spec
+uft.dctl:       uft.dctl.in
+		grep -v '#' uft.dctl.in \
+		  | sed 's#%SPEC_PREFIX%#$(PREFIX)#g' \
+		  | sed 's#%SPEC_APPLID%#$(APPLID)#g' \
+		  | sed 's#%SPEC_VERSION%#$(VERSION)#g' \
+		  | sed 's#%SPEC_RELEASE%#$(RELEASE)#g' \
+		  | sed 's#%SPEC_UNAMEM%#$(UNAMEM)#g' \
+		  | sed 's#%SPEC_STAGING%#$(STAGING)#g' \
+		  | sed 's#%SPEC_LOCDIR%#$(LOCDIR)#g' \
+		  | sed 's#%SPEC_LOCALE%#$(LOCALE)#g' \
+		  | uniq > uft.dctl
 
 

@@ -1,9 +1,10 @@
 #!/bin/sh
-# Copyright 1995-2025 Richard M. Troth, all rights reserved. <plaintext>
+# Copyright 2025 Richard M. Troth, all rights reserved. <plaintext>
 #
-#         Name: rcv (shell script)
-#               "receive" a file sent via UFT
-#         Date: 2024-04-19 (Fri) Gallatin, and prior
+#         Name: rrm (shell script)
+#               remove (purge) a file sent via UFT
+#         Date: 2024-10-29 (Wed)
+#       Author: Rick Troth, Cedarville, Ohio, USA
 #
 #         Note: this is a *really* simplistic script
 #               The layout of the UFT spooling directories along with
@@ -21,6 +22,20 @@
 Z=`basename "$0"`
 
 #
+# some environments have a non-POSIX side:
+case `uname -s` in
+    VM/ESA|z/VM) # this section depends on the z/VM implementation
+        echo "+ #cp purge * rdr $1"
+        cms "cp purge * rdr $1"
+        exit $?
+        ;;
+    OS/390)
+        echo "$Z: operation not supported on MVS" 1>&2
+        exit 28
+        ;;
+esac
+
+#
 # get username to know which UFT spool space sub-directory to use
 U=`id | awk -F\( '{print $2}' | awk -F\) '{print $1}'`
 if [ -z "$U" ] ; then U=$USER ; fi
@@ -28,6 +43,7 @@ if [ -z "$U" ] ; then U=$USERNAME ; fi
 
 #
 # here's hoping that per-user sub-dir does in fact exist
+D=/usr/spool/uft/$U
 if [ -n "$UFT_SPOOLDIR" ]; then D="$UFT_SPOOLDIR"; fi
 mkdir -m 0700 "$D" 2> /dev/null
 if [ ! -d "$D" ] ; then D=/usr/spool/uft/$U ; fi
@@ -46,66 +62,7 @@ if [ -z "$S" ] ; then S=1 ; fi
 S=`echo "0000$S" | awk '{print substr($0,length($0)-3,4)}'`
 
 #
-# extract the metadata and load it into this shell
-grep -v '^#' $D/$S.cf | awk '{print "UFT_" $0}' | grep -v '=$' \
-    | grep -v '`' | grep -v ';' | grep -v '(' | grep -v ')' \
-    | grep -v '^$' > /tmp/$$.set
-RC=$? ; if [ $RC -ne 0 ] ; then rm -f /tmp/$$.set ; exit $RC ; fi
-. /tmp/$$.set
-rm /tmp/$$.set
-
-#
-# file needs a name - command line can override or specify a name
-T="$2"
-#if [ -z "$T" ] ; then T="$UFT_NAME" ; fi
-if [ -z "$T" ] ; then T=`basename "$UFT_NAME"` ; fi
-if [ -z "$T" ] ; then
-    echo "$Z: UFT file $S needs a name" 1>&2
-    exit 1 ; fi
-# files might be sent unnamed, such as output from a command
-
-#
-# report and receive
-echo "$Z: receiving UFT file $S as '$T'"
-
-#
-# be selective about canonization
-case "$UFT_TYPE" in
-    a*|A*|t*|T*)                # "ASCII" or plain text
-        cat $D/$S.df | sed 's#\r$##' > $T
-        RC=$?
-        ;;
-    n*|N*)                      # IBM NETDATA (convert to plain text)
-        uftcndd $D/$S.df > $T
-        RC=$?
-        ;;
-    *)                          # all others treat as binary
-        cat $D/$S.df > $T
-        RC=$?
-        ;;
-esac
-if [ $RC -ne 0 ] ; then exit $RC ; fi
-
-#
-# conditionally stamp the original time on the file
-if [ ! -z "$UFT_DATE" ] ; then touch -d "$UFT_DATE" $T 2> /dev/null ; fi
-
-#
-# conditionally set original permissions on the file
-if [ ! -z "$UFT_PROT" ] ; then
-    echo "$UFT_PROT" | xargs -d , -n 1 -r \
-        | grep '^U:' | tr A-Z a-z | sed 's#u:#u+#' \
-        | awk '{print "chmod" , $0 , "#"}' | sed "s/#/$T/" | sh
-    echo "$UFT_PROT" | xargs -d , -n 1 -r \
-        | grep '^G:' | tr A-Z a-z | sed 's#g:#g+#' \
-        | awk '{print "chmod" , $0 , "#"}' | sed "s/#/$T/" | sh
-    echo "$UFT_PROT" | xargs -d , -n 1 -r \
-        | grep '^W:' | tr A-Z a-z | sed 's#w:#o+#' \
-        | awk '{print "chmod" , $0 , "#"}' | sed "s/#/$T/" | sh
-fi
-
-#
-# if that worked then discard the spool file (all components)
+# got this far? then discard the spool file (all components)
 yes | rm $D/$S.*
 
 exit
