@@ -70,7 +70,10 @@ The UFT client `sf` has built-in proxy support. <br/>
 If you are running Tor locally, you can use its proxy service
 to connect with UFT servers via Tor, including .onion hosts.
 
-    sf --proxy 'nc -x 127.0.0.1:9050 %h %p' *file* user@host
+    sf --proxy 'nc -x 127.0.0.1:9050 %h %p' file user@host
+
+ ... where `file` is the file to send, `user` is the recipient,
+and `host` is the long form .onion hostname.
 
 Here we use the netcat command `nc` to run the UFT transaction
 through the local Tor service. Target UFT recipients can be either
