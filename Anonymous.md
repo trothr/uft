@@ -22,6 +22,9 @@ and then runs `uftd` for each incoming connection. This makes the `uftd`
 program much easier to write and maintain. It also puts more of the
 configuration (and perhaps more work) into the hands of the local admin.
 
+You can use standard UFTD for your hidden UFT service, but it's wise
+to instead run an anonymized UFT server on a different port.
+
 YOU DO NOT have to keep a standard UFTD running in order to run a
 hidden or anonymous UFTD. It may help understanding and debugging
 of the configuration to run a standard UFTD, but the two are distinct.
@@ -41,7 +44,13 @@ That will route traffic coming in on TCP port 608 to your
 on port 1608 as easily as the standard `uftd` on port 608 via INETD/XINETD.
 
 With some INETD implementations, you can restrict inbound connections
-to the local host. That's helpful.
+to the local host. That's helpful. An example from INETD configuration is:
+
+    ufta  stream  tcp  nowait  root  /usr/libexec/ufta  uftd
+
+See the next section for building `ufta`.
+
+Make sure that "ufta" is properly listed in `/etc/services`.
 
 Further details of Tor hidden services are not discussed here
 for the sake of brevity.
