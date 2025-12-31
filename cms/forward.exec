@@ -1,11 +1,10 @@
-/* © Copyright 1993, 1994, 1995, 1996, 1997, Richard M. Troth,
- *              all rights reserved.    (casita sourced)     <plaintext>
+/* © Copyright 1993, 1994, 1995, 1996, 1997, 2025, Richard M. Troth, all rights reserved. <plaintext>
  *
  *        Name: FORWARD EXEC (formerly REROUTE EXEC)
  *              resubmit RDR files to RSCS destined for someone else
  *      Author: Rick Troth, Rice University, Information Systems
  *              Rick Troth, Houston, Texas, USA
- *        Date: 1990-Dec-29, 1993-Nov-01, 1997-Aug-07
+ *        Date: 1990-Dec-29, 1993-Nov-01, 1997-Aug-07, 2025-Dec-02
  *
  *     co-reqs: SENDMAIL REXX, UFTXDSPL, UFTCMAIN, and friends
  */
@@ -19,11 +18,11 @@ Parse Arg file dest '(' . ')' .
 If ^Datatype(file,'N') Then Do
     'XMITMSG 650 FILE (ERRMSG'
     Exit 24
-    End  /*  If  ..  Do  */
+    End /* If .. Do */
 If dest = "" Then Do
     'XMITMSG 386 (ERRMSG'
     Exit 24
-    End  /*  If  ..  Do  */
+    End /* If .. Do */
 
 Parse Upper Var dest to .
 If to = "TO" Then Parse Var dest . dest
@@ -32,14 +31,15 @@ Parse Upper Var dest . at .
 If at = "AT" Then Parse Var dest user . node .
              Else Parse Var dest user "@" node .
 
-If user = ""  Then user = userid        /* myself at some other node */
-If user = "*" Then user = userid        /* myself at some other node */
-If node = "" Then Do                    /* look it up in NAMES */
+If user = ""  Then user = userid         /* myself at some other node */
+If user = "*" Then user = userid         /* myself at some other node */
+If node = "" Then Do                           /* look it up in NAMES */
     'MAKEBUF'
     'NAMEFIND :NICK' user ':USERID :NODE (FIFO'
     If rc = 0 Then Do; Parse Pull user . ; Parse Pull node . ; End
-    Else node = nodeid
+              Else node = nodeid
     If node = "" Then node = nodeid
+    'DROPBUF'
     End /* If .. Do */
 
 Parse Value Diag(08,'QUERY RDR' file 'ALL') ,
@@ -47,11 +47,11 @@ Parse Value Diag(08,'QUERY RDR' file 'ALL') ,
 ft = Strip(ft)
 
 Select
-    /*  RiceMAIL's definition of "mail" ignores CLASS  */
+    /* RiceMAIL's definition of "mail" ignores CLASS */
     When ft = "MAIL" | ft = "NOTE" Then Do
         Parse Value Diagrc(08,'ORDER RDR' file) ,
             With 1 rc 10 . 17 rs '15'x .
-        /*  build an RFC 822 style date construct  */
+        /* build an RFC 822 style date construct */
         Parse Var date mm '/' dd '/' yy
         maildate = Left(day,3) || ',' dd mon(mm) yy time tz
         'PIPE READER | NLOCATE 1.1 /' || '03'x || '/ | SPEC 2-* 1' ,
@@ -62,30 +62,21 @@ Select
                     '| LITERAL Resent-From:' userid || '@' || nodeid ,
                         '| LITERAL Resent-Date:' maildate ,
                             '| sendmail -t'
-        End  /*  When  ..  Do  */
+        End /* When .. Do */
     When Index(node,'.') > 0 Then Do
-/*
-        'CP ORDER RDR' file
-        'PIPE READER | SENDFILE -' user 'AT' node
- */
-        'PIPE UFTXDSPL' file '| UFTCMAIN' user || '@' || node
-        End  /*  When  ..  Do  */
+        user = user || '@' || node
+        'PIPE UFTXDSPL' file '| UFTCMAIN' user
+        End /* When .. Do */
     Otherwise Do
-        Parse Value Diag(08,'QUERY SET') ,
-            With . "IMSG" imsg . "," . '15'x .
-        'CP SET IMSG OFF'
         'CP TAG FILE' file node user '50'
         'CP TRANSFER RDR' file 'TO' rscsid 'RDR'
-        'CP SET IMSG' imsg
-        End  /*  Otherwise  Do  */
-    End  /*  Select  */
+        End /* Otherwise Do */
+    End /* Select */
 
 Exit
 
 Address "COMMAND" 'GLOBALV SELECT MAIL GET' ,
         'MAIL_OPTION.LOCAL.DOMAIN'
-
-
 
 /* ----------------------------------------------------------------- MON
  */
@@ -94,13 +85,13 @@ MON: Procedure
 Parse Arg mm
 If ^Datatype(mm,'N') Then Return mm
 
-/*  first try extracting month name from the message repository  */
+/* first try extracting month name from the message repository */
 'PIPE COMMAND XMITMSG 8559 (APPLID DMS' ,
-    'FORMAT mm LINE 2 NOHEADER | VAR MONTH'
+    'FORMAT' mm 'LINE 2 NOHEADER | VAR MONTH'
 If rc = 0 Then Return month
 
-/*  if that failed, then you're stuck with AMENG equivalents  */
-Select  /*  mm  */
+/* if that failed, then you're stuck with AMENG equivalents */
+Select /* mm */
     When mm = 1  Then Return "Jan"
     When mm = 2  Then Return "Feb"
     When mm = 3  Then Return "Mar"
@@ -114,5 +105,6 @@ Select  /*  mm  */
     When mm = 11 Then Return "Nov"
     When mm = 12 Then Return "Dec"
     Otherwise Return mm
-    End  /*  Select  mm  */
+    End /* Select mm */
+
 

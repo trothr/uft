@@ -44,6 +44,7 @@ int uftc_close(int*);
 #endif
 
 #include <ctype.h>
+#include "aecs.h"
 
 #define __USE_XOPEN
 #include <time.h>
@@ -72,6 +73,9 @@ int uftcflag;
 static char agstring[256] = { 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 int uftlogfd = -1;
+
+static char *gsbp = NULL;             /* global string buffer pointer */
+static int gsbl = 0;                     /* global string buffer size */
 
 /* ---------------------------------------------------------------------
  *    This routine handles message FORMATTING (not message delivery).
@@ -110,7 +114,7 @@ int uftx_message(char*mo,int ml,                    /* buffer, buflen */
   }
 
 /* -------------------------------------------------------- User Message
- *  This routine attempts to deliver a message to a logged-on user.
+ *    This routine attempts to deliver a message to a logged-on user.
  *  This is somewhat crude: we toss the work of finding the user
  *  and delivering the message to the 'write' command. But be careful:
  *  on MS Windows there is a completely different 'write' command.
@@ -376,6 +380,86 @@ int uftd_fann(char*user,char*spid,char*from)
     return rc;
   }
 
+/* -------------------------------------------------- File Announce TANN
+ *    This routine announces the transfer of a file.
+ *       Calls: msgd_xmsg_sock(), msgd_xmsg_fifo(), uftd_message()
+ */
+int uftd_tann(char*user,char*spid,char*from)
+  { static char _eyecatcher[] = "uftd_tann()";
+    int rc, i, l, fd;
+    char *p, *q, buffer[4096], fn[256], un[64], *mv[8];
+
+    /* parse the supplied user name */
+    p = user; i = 0;
+    while (i < sizeof(un) - 1 && *p != 0x00 && *p != '@')
+      { un[i++] = *p++; }
+    un[i] = 0x00;
+
+    /* start at the start of the buffer and note its size for limit   */
+    q = buffer; i = 0;
+    l = sizeof(buffer) - 2;
+
+    mv[0] = "";
+    mv[1] = spid; mv[2] = from;                         /* two tokens */
+    rc = uftx_message(q,l,85,"SRV",3,mv);
+    /*   85    I file &1 sent from &2                                 */
+    if (rc < 0) return rc;
+
+    while (*q != 0x00 && i < l) { q++; i++; }
+    if (i < l) { q++; i++; }      /* skip one more past end of string */
+
+    /* we don't always care about the message type but we always tell */
+    p = "MSGTYPE=IMSG";         /* 7 - IMSG      */
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    if (i < l) { *q++ = 0x00; i++; }    /* terminate and skip pointer */
+
+    /* this is obvious to the receiving user but we include it anyway */
+    p = "MSGUSER=";                 /* who is this file to? (obvious) */
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    p = user;
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    if (i < l) { *q++ = 0x00; i++; }    /* terminate and skip pointer */
+
+    /* this is in the message but here too (varies from VM IMSG)      */
+    p = "MSGFROM=";                          /* who is the file from? */
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    p = from;
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    if (i < l) { *q++ = 0x00; i++; }    /* terminate and skip pointer */
+
+    /* indicate the "spool ID"                                        */
+    p = "UFTSPID=";
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    p = spid;
+    while (*p != 0x00 && i < l) { *q++ = *p++; i++; }
+    if (i < l) { *q++ = 0x00; i++; }    /* terminate and skip pointer */
+
+    /* double NULL marks end of environment variables                 */
+    if (i < l) { *q++ = 0x00; i++; }
+
+    /* at this point we have a buffer and we know its length          */
+    /* try: socket, home socket, FIFO, home FIFO, 'write'             */
+
+    /* -------- try socket ------------------------------------------ */
+    rc = msgd_xmsg_sock(un,buffer,i);
+    if (rc >= 0) return rc;            /* zero or positive is success */
+
+    /* -------- try FIFO -------------------------------------------- */
+    rc = msgd_xmsg_fifo(un,buffer,i);
+    if (rc >= 0) return rc;            /* zero or positive is success */
+
+    /* -------- try brute force ------------------------------------- */
+    rc = uftd_message(un,buffer);
+
+    /* -------- merge uftdlmsg logic here --------------------------- */
+#ifdef UFT_DO_SYSLOG
+    openlog("uftd",LOG_PID|LOG_CONS,LOG_UUCP);
+    syslog(LOG_INFO,"%s",buffer);
+#endif
+
+    return rc;
+  }
+
 /* © Copyright 1995, Richard M. Troth, all rights reserved.  <plaintext>
  *
  *        Name: userid.c
@@ -392,16 +476,18 @@ int uftd_fann(char*user,char*spid,char*from)
  *
  *        Note: Size is limited to 63 characters because we force it
  *              to lower case (ths is POSIX!) using a private buffer.
+ *        Note: On systems where the username cannot be determined
+ *              (cough, MS Windows, cough) we return a dash.
  */
 char *uftx_user()
   { static char _eyecatcher[] = "uftx_user()";
-#ifdef UFT_POSIX
     int i;
-    char *u;
+    char *u = "";
     static char ut[64];
-    struct passwd *pwdent;
 
-    u = "";
+#ifdef UFT_POSIX
+
+    struct passwd *pwdent;
 
     /* first try effective uid key into passwd */
 /*  if (*u == 0x00)                           this would be redundant */
@@ -412,6 +498,8 @@ char *uftx_user()
     if (*u == 0x00) {
     pwdent = getpwuid(getuid());
     if (pwdent) u = pwdent->pw_name; if (u == 0x0000) u = ""; }
+
+#endif
 
     /* skating on thin ice: try USER environment variable */
     if (*u == 0x00) {
@@ -426,12 +514,10 @@ char *uftx_user()
     while (*u != 0x00 && i < sizeof(ut) - 1)
       { if (isupper(*u)) ut[i] = tolower(*u);
                     else ut[i] = *u;
-        i++; u++;
-      } ut[i] = 0x00;
+        i++; u++; }
+    ut[i] = 0x00;
+
     return ut;
-#else
-    return "";
-#endif
   }
 
 #ifdef UFT_POSIX
@@ -444,19 +530,19 @@ char *useridg()
     char       *g;
     struct passwd *pwdent;
 
-    /*  if the user set one, take that  */
+    /* if the user set one, take that  */
     g = getenv("NAME");
     if (g != 0x0000 && *g != 0x00) return g;
 
-    /*  next, try GECOS for effective uid key into passwd  */
+    /* next, try GECOS for effective uid key into passwd  */
     pwdent = getpwuid(geteuid());
     if (pwdent) return pwdent->pw_gecos;
 
-    /*  next, try GECOS field for real uid key into passwd  */
+    /* next, try GECOS field for real uid key into passwd  */
     pwdent = getpwuid(getuid());
     if (pwdent) return pwdent->pw_gecos;
 
-    /*  give up!  */
+    /* give up!  */
     return uftx_user();
   }
 #endif
@@ -480,7 +566,7 @@ char *useridg()
 
 /* ------------------------------------------------------------ SENDIMSG
  */
-int sendimsg ( char *user , char *text )
+int sendimsg(char*user,char*text)
   {
     char        buffer[4096], *p, *from;
     int         fd, i;
@@ -914,7 +1000,7 @@ int uftd_agck(char*k)
 
 /* -------------------------------------------------------------- GETENV
  *    Returns a pointer to the value of the requested variable,
- *    or points to the end of the environment buffer.
+ *    or points to the end of the environment buffer. (double null)
  */
 char*uftx_getenv(char*var,char*env)
   { static char _eyecatcher[] = "uftx_getenv()";
@@ -1201,7 +1287,7 @@ us->uft_from[0] = 0x00;
 #endif
   }
 
-/* ---------------------------------------------------------------------
+/* --------------------------------------------------------------- PURGE
  *    Remove all files (per known extensions) for this spool file.
  */
 int uft_purge(struct UFTSTAT*us)
@@ -1209,11 +1295,13 @@ int uft_purge(struct UFTSTAT*us)
     int rc, i;
     char sidn[64];
     struct  stat  statbuf;
-    char *exts[] = {  UFT_EXT_CONTROL,  /*    ".cf" ** control/meta   */
+    char *exts[] = {  UFT_EXT_BATCH,    /*    ".bf" ** batch, SIFT    */
+                      UFT_EXT_CONTROL,  /*    ".cf" ** control/meta   */
                       UFT_EXT_DATA,     /*    ".df" ** data           */
                       UFT_EXT_EXTRA,    /*    ".ef" ** resource fork  */
                       UFT_EXT_LIST,     /*    ".lf" ** 'ls -l' format */
                       UFT_EXT_WORK,     /*    ".wf" ** work file      */
+                      UFT_EXT_TEMP,     /*    ".tf" ** temp file      */
                       ""   };       /* empty string marks end of list */
 
     /* loop through the standard filename extensions deleting all     */
@@ -1321,6 +1409,7 @@ void uftdstat(int sock,char*zlda)
  */
 
 /* ------------------------------------------------------------ UFTCTEXT
+ *    read a line of plain text
  */
 int uftctext(int s,char*b,int l)
   { static char _eyecatcher[] = "uftctext()";
@@ -1339,14 +1428,12 @@ int uftctext(int s,char*b,int l)
     p = t;
     for (i = 0; i < j; i++)
       {
-        if (*p == '\n')
-          {
-            b[i] = '\r';
-            i++;  j++;
-          }
+        if (*p == '\n') { b[i] = '\r'; i++;  j++; }
         b[i] = *p++;
       }
  */
+
+//  t[j] = 0x00;
     j = htonb(b,t,j);
 
     return j;
@@ -1402,6 +1489,346 @@ char *uftcprot(mode_t prot)
     /*  terminate the string and return  */
     *p++ = 0x00;
     return buffer;
+  }
+
+/* ------------------------------------------------------------ UFTDNEXT
+ *        Name: uftdnext.c (C program source)
+ *              Unsolicited File Transfer daemon "next" routine
+ *              returns next available SEQuence number
+ */
+int uftdnext()
+  { static char _eyecatcher[] = "uftdnext()";
+    int         i, n, n0, sf;
+    char        temp[256], *seq;
+
+    char *exts[] = {  UFT_EXT_BATCH,    /*    ".bf" ** batch, SIFT    */
+                      UFT_EXT_CONTROL,  /*    ".cf" ** control/meta   */
+                      UFT_EXT_DATA,     /*    ".df" ** data           */
+                      UFT_EXT_EXTRA,    /*    ".ef" ** resource fork  */
+                      UFT_EXT_LIST,     /*    ".lf" ** 'ls -l' format */
+                      UFT_EXT_WORK,     /*    ".wf" ** work file      */
+                      UFT_EXT_TEMP,     /*    ".tf" ** temp file      */
+                      ""   };       /* empty string marks end of list */
+
+    /* start with our preferred SEQuence file name */
+    seq = UFT_SEQFILE;
+    /* switch to alternate if we run into errors */
+
+    /* first, try to open the sequence file */
+#ifdef  WEAKOPEN
+    sf = open(seq,O_RDWR|O_CREAT);
+    if (sf < 0 && errno == EINVAL)
+      { seq = UFT_SEQFILE_ALT;
+        sf = open(seq,O_RDWR|O_CREAT); }
+#else
+    sf = open(seq,O_RDWR|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+    if (sf < 0 && errno == EINVAL)
+      { seq = UFT_SEQFILE_ALT;
+        sf = open(seq,O_RDWR|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP); }
+#endif
+    if (sf < 0) return sf;            /* open of sequence file failed */
+#ifdef  WEAKOPEN
+    (void) sprintf(temp,"chmod 664 %s",seq);
+    (void) system(temp);
+#endif
+    /* (it would help if the above resulted in exclusive access) */
+
+    /* now extract the sequence number */
+    i = read(sf,temp,8);
+    if (i < 0)
+      { (void) close(sf); return i; } /* read of sequence file failed */
+    temp[++i] = 0x00;                  /* make sure string terminates */
+    n0 = atoi(temp);                         /* convert string to int */
+
+    /* increment the sequence number until a free slot is found       */
+    for (n = n0; ++n; n != n0)
+      { if (n > 9999) n = 1;         /* wrap at 10000 (0000 reserved) */
+//      (void) sprintf(temp,"%04d.cf",n);
+//      if (access(temp,0) != 0) break;
+        /* loop while <nnnn>.cf exists (or .df or .ef or other)       */
+        i = 0; while (*exts[i] != 0x00) {
+            sprintf(temp,"%04d.%s",n,exts[i]);   /* the physical file */
+            if (access(temp,0) == 0) break;         /* does it exist? */
+            i++;       /* next */       }
+        if (exts[i] != 0x00) break;     }
+
+    /* if we've been around once, don't continue */
+    if (n == n0)
+      { (void) close(sf);
+        /* implies there are 10000 files in this directory! */
+        errno = ENOENT;
+        return -1; }
+
+    /* now back-up to the start of the sequence file */
+    (void) lseek(sf,0,0);                                 /* "rewind" */
+    /* we need locking; we also should check for errors here */
+
+    /* write the new sequence number */
+    (void) sprintf(temp,"%04d",n);
+    i = uftx_putline(sf,temp,0);
+    if (i < 0)
+      { (void) close(sf); return i; }     /* write of seq file failed */
+
+    /* and close it */
+    (void) close(sf);
+
+    /* and return this wonderful number */
+    return n;
+  }
+
+/* ----------------------------------------------------------------- WTL
+ *    write text local
+ *    Write TYPE A traffic to open file descriptor with localization.
+ */
+int uftx_wtl(int s,char*b,int l)
+  { static char _eyecatcher[] = "uftx_wtl()";
+    int rc, n, o, i;
+    char *p;
+
+    n = o = 0;                                 /* initial counts zero */
+    p = b;                        /* first line at begining of buffer */
+    while (l > 0)
+      { while (*p != 0x00 && *p != '\r' && *p != '\n' && l > 0)
+          { p++; l--; o++; }
+        if (*p == '\r' && l > 0)     /* skip incoming carriage return */
+          { *p++ = 0x00; l--; }
+        if (*p == '\n' && l > 0)             /* note incoming newline */
+          { *p++ = 0x00; l--; o++;
+#ifdef OECS
+            stratoe(b);       /* optionally translate ASCII to EBCDIC */
+#endif
+            b[o] = '\n';               /* put that newline at the end */
+            rc = write(s,b,o);
+            if (rc < 0) return rc;      /* if error then bail out now */
+            n = n + o;                        /* old school but works */
+            o = 0;
+          } else if (l <= 0 && o > 0) {
+            for (i = 0; i < o; i++) b[i] = chratoe(b[i]);
+            rc = write(s,b,o);
+            if (rc < 0) return rc;    } /* if error then bail out now */
+        b = p;                           /* point to next line-o-text */
+      }
+
+    return n;              /* return number of bytes actually written */
+  }
+
+/* ----------------------------------------------------------------- E2L
+ *    EBCDIC to local
+ *    Write TYPE E or textual Netdata traffic with localization.
+ */
+int uftx_e2l(int s,char*b,int l)
+  { static char _eyecatcher[] = "uftx_e2l()";
+    int rc;
+
+    if (gsbp == NULL || gsbl < l)
+      { if (gsbp != NULL) free(gsbp);
+        gsbl = (gsbl + l + 0x10000) & 0xffff0000;
+/*                                             0 16
+                                              00 256
+                                             000 4096
+                                            0000 65536
+                                           00000 1048576 1M
+                                          000000 16777216 16M
+                                         0000000 268435456 256M
+                                        00000000 4294967296 4G        */
+        gsbp = malloc(gsbl);
+        if (gsbp == NULL) { if (errno != 0) perror("uftx_e2l: malloc");
+                            gsbl = 0; return -1; } }
+
+    memcpy(gsbp,b,l);                          /* copy the string ... */
+    gsbp[l] = 0x00;                           /* ... and terminate it */
+
+#ifndef OECS
+    rc = stretoa(gsbp);                /* translate if local is ASCII */
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+    gsbp[l++] = '\r';                   /* carriage return if Windoze */
+#endif
+
+    gsbp[l++] = '\n';                         /* newline in all cases */
+    rc = write(s,gsbp,l);
+
+    return rc;
+  }
+
+/* -------------------------------------------------------------- GETNDR
+ *    Get a NETDATA Record
+ *    need: fd, buffer, bufmax, buflen, bufdex
+ *    give: output (pointer), outlen (size/len), and adjust the buffer
+ *              This is kind of tricky.
+ *              The UFTNDIO struct must be initialized before the first
+ *              call to this routine. See uftcndd.c for example.
+ */
+int uftx_getndr(int fd,struct UFTNDIO*uftndio,int*flag,char**output,int*outlen)
+  { static char _eyecatcher[] = "uftx_getndr()";
+    int rc, l, m;
+    char *p;
+
+    /* do we need to prime the buffer */
+    if (uftndio->buflen == 0)
+      { rc = read(fd,uftndio->buffer,uftndio->bufmax);
+        if (rc < 0) { if (errno != 0) perror("uftx_getndr: read"); return rc; }
+        uftndio->buflen = rc;    /* remember how much we actually got */
+        uftndio->bufdex = 0; }         /* buffer index starts at zero */
+
+    /* if we have passed the limit then return an indicator to say so */
+    if (uftndio->bufdex >= uftndio->buflen) return -1;
+
+    p = uftndio->buffer;
+    l = p[uftndio->bufdex];                   /* +0 is segment length */
+    l = 0xff & l;
+
+    m = p[uftndio->bufdex+1];         /* the flag byte or record type */
+    m = 0xff & m;                       /* +1 is segment type or flag */
+    *flag = m;
+
+    /* check it: are we about to run off the end of the buffer?       */
+    if (uftndio->bufdex + l >= uftndio->buflen)
+      { int k, j; char *q;
+        k = uftndio->buflen - uftndio->bufdex;      /* remainder size */
+        q = &p[uftndio->bufdex];          /* point to current segment */
+        memcpy(p,q,k);     /* shift remainder left to start of buffer */
+        q = &p[k];                        /* now point past remainder */
+        j = uftndio->bufmax - k;     /* figure adjusted count to read */
+        rc = read(fd,q,j);                 /* read more from the file */
+        if (rc < 0) { if (errno != 0) perror("uftx_getndr: read"); return rc; }
+        uftndio->buflen = rc + k;    /* how much buffer space we have */
+        uftndio->bufdex = 0; }                  /* reset buffer index */
+
+    *output = &p[uftndio->bufdex+2];    /* +2 is pointer to this part */
+    uftndio->bufdex += l;                       /* prep for next call */
+    *outlen = --l;
+    *outlen = --l;                               /* size of this part */
+
+/* FIXME: check at this point if we have run off the end of the buffer */
+/*  if (uftndio->bufdex >= uftndio->buflen) ...                       */
+//  /* shift remainder left to start of buffer */
+    /* adjust uftndio->buflen to match size of remainder */
+    /* adjust size-to-read down accordingly */
+    /* read at offset (past remainder) */
+    /* add bytes read to uftndio->buflen */
+    /* set new uftndio->bufdex to zero */
+
+    return 0;
+  }
+
+/* ---------------------------------------------------------------- NDFD
+ *    UFT Netdata Stream Decoder - Netdata via File Descriptors
+ *        Note: maximum recovered record size is 64K bytes
+ */
+int uftx_ndfd(int fdi,int fdo,int flag)
+  { static char _eyecatcher[] = "uftx_ndfd()";
+    int rc, type, plen, i;
+    char *part, b1[65536], b2[65536];
+    struct UFTNDIO ndio;
+
+    /* focus the flag variable on "translate or not"                  */
+    flag = flag & (UFT_DOTRANS|UFT_NOTRANS);
+
+    /* initialize the UFTNDIO struct                                  */
+    ndio.buffer = b1;
+    ndio.bufmax = sizeof(b1);
+    ndio.buflen = 0;
+    ndio.bufdex = 0;
+
+    while (1)
+      { rc = uftx_getndr(fdi,&ndio,&type,&part,&plen);
+        if (rc < 0) if (errno != 0) perror("uftx_getndr");
+        if (rc < 0) fprintf(stderr,"uftx_getndr() returned %d\n",rc);
+        if (rc < 0) break;
+
+        if (type & UFT_ND_CTRL)                   /* a control record */
+          { if (memcmp(part,UFT_ND_INMR06,6) == 0) break;
+          } else switch (type) {              /* a non-control record */
+            case UFT_ND_FIRST:
+                memcpy(b2,part,plen);
+                i = plen;
+                break;
+            case UFT_ND_NONE:
+                memcpy(&b2[i],part,plen);
+                i = i + plen;
+                break;
+            case UFT_ND_LAST:
+                memcpy(&b2[i],part,plen);
+                i = i + plen;
+                if (flag & UFT_DOTRANS) uftx_e2l(fdo,b2,i);
+                                   else write(fdo,b2,i);
+                i = 0;
+                break;
+            case UFT_ND_FIRST|UFT_ND_LAST:
+                if (flag & UFT_DOTRANS) uftx_e2l(fdo,part,plen);
+                                   else write(fdo,part,plen);
+                break;
+            default:
+                fprintf(stderr,"mixed records\n");
+                break;
+          }
+      }
+
+    return rc;
+  }
+
+/* ------------------------------------------------------------ ISBINARY
+ *    This routine makes a best guess about the content, whether it is
+ *    "binary" or textual, based on the record supplied to it.
+ *     Returns: non-zero if the record appears to contain binary content
+ */
+int uftx_isbinary(char*b,int l)
+  { static char _eyecatcher[] = "uftx_isbinary()";
+    int i; char *j;
+    char binz[] = { 0x01,
+                    0x02,
+                    0x03,
+                    0x04,
+                 /* 0x05  =  E TAB */
+                    0x06,
+                    0x07, /* A BEL */
+                    0x08, /* A BS */
+                 /* 0x09  =  A TAB */
+                 /* 0x0A  =  A LF */
+                    0x0B,
+                    0x0C, /* X FF */
+                 /* 0x0D  =  X CR */
+                    0x0E,
+                    0x0F,
+                    0x10,
+                    0x11,
+                    0x12,
+                    0x13,
+                    0x14,
+                 /* 0x15  =  E NL */
+                    0x16, /* E BS */
+                    0x17,
+                    0x18,
+                    0x19,
+                    0x1A,
+                    0x1B, /* A ESC */
+                    0x1C,
+                    0x1D,
+                    0x1E,
+                    0x1F,
+                    0x00 };             /* null terminates the string */
+
+    for (i = 0; i < l; i++)
+        for (j = binz; *j != 0x00; j++)
+            if (b[i] == *j) return 1;
+
+    return 0;
+  }
+
+/* -------------------------------------------------------------- ABBREV
+ * Returns length of info if info is an abbreviation of informat.
+ * Returns zero if info does not match or is shorter than minlen.
+ * Comparison is not case sensitive.
+ */
+int uftx_abbrev(char*informat,char*info,int minlen)
+  { static char _eyecatcher[] = "abbrev()";
+    int     i;
+    for (i = 0; info[i] != 0x00; i++)
+        if (toupper(informat[i]) != toupper(info[i])) return 0;
+    if (i < minlen) return 0;
+    return i;
   }
 
 /* ------------------------------------------------------------ MSGWRITE
