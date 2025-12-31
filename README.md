@@ -1,5 +1,9 @@
 # UFT
 
+Note:
+This project has been moved and now lives at
+https://github.com/trothtech/uft/
+
 Unsolicited File Transfer
 
 Here, "unsolicited" does not mean "unwanted"
@@ -19,13 +23,10 @@ The new repository has both POSIX and VM/CMS components.
 
 You *really* should be looking to the other repository, not here.
 
-## README for POSIX UFT
+## UFT for POSIX Systems
 
-This is the README file for POSIX UFT.
-For more information, see the HTML files in the "doc" directory
-or find the same content on the web at ...
-
-    http://www.casita.net/pub/uft/
+The POSIX (Unix, Linux, and other Unix-like systems)
+source is in the `src` directory.
 
 The usual sequence of steps to build UFT on a POSIX system is ...
 
@@ -34,16 +35,26 @@ The usual sequence of steps to build UFT on a POSIX system is ...
     make install
     make clean
 
-The only option 'configure' takes is "--prefix".
+The `configure` script is not very sophisticated.
+The only option it takes is `--prefix`.
 
-For Solaris, if 'make' fails, try
+The `sf` UFT client command sends files to UFT servers. <br/>
+Use either "-a" for plain text files or "-i" for binary files.
 
-    cc -lnsl -lsocket -o sf uftc.o tcpopen.o getline.o netline.o putline.o
+Files received by the UFT server are held in a sort of "delivery dock"
+for disposition by the target user. There are two commands: `rls`
+to list files waiting on the dock, and `rcv` to receive selected files.
 
-in this directory.
 
-Feel free to use $(CC) and other more orthodox methods in the makefile.
-I will eventually clean that up.   Feel free to contribute improvements!
+
+
+
+
+
+
+
+
+
 
 ## UFT for VM/CMS
 
@@ -52,17 +63,37 @@ file transfer networking (specifically NJE). So naturally, there is a
 VM/CMS implementation of UFT. That was not originally in this project
 but is explicitly included in the new home. (see above)
 
+See the `cms` directory.
+
+The VM/CMS UFT implementation is intended to work with existing
+commands and utilities on the VM/CMS system. `rdrlist` and `receive`
+remain unchanged. There is a UFT-enabled `sf` command which can be used
+in place of stock `sendfile`.
+
 ## Response Codes
 
-"The numbers are all wrong". The response code numbers have been
-hastily slapped into the code and may change. But PLEASE NOTE that
-one significant aspect of UFT is that the response numbers are UNIQUE.
+Take note that UFT protocol response numbers are unique.
 Contrast with SMTP and FTP where a particular numeric response code
 can be produced for multiple conditions.
+
+## Numbered Files
+
+So call "spool files" on the z/VM system and similar systems
+are numbered and may or may not be named. (Consider a print job
+which does not strictly need a name.) UFT implementations follow
+this behavior: all delivered files are numbered and are referred to
+by their number. If the file was named on the sending side,
+that name should persist when the file is formally received.
 
 "If you have three pet dogs, give them names.
 If you have 10,000 head of cattle, don't bother." <br/>
  -- David Gelernter <br/>
  -- recorded 2000-09-10, dunno when he actually said that
+
+## Download
+
+Pre-compiled and otherwise runnable packages are available from
+
+http://www.casita.net/pub/uft/
 
 
