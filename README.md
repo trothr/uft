@@ -4,6 +4,10 @@ Note:
 This project has been moved and now lives at
 https://github.com/trothtech/uft/
 
+The new repository has both POSIX and VM/CMS components. <br/>
+Since the move, this copy lags behind the other. <br/>
+You *really* should be looking to the other repository, not here.
+
 Unsolicited File Transfer
 
 Here, "unsolicited" does not mean "unwanted"
@@ -14,14 +18,6 @@ A better expansion of the acronym might be <br/>
 *Universal* File Transfer (a name with less baggage) <br/>
 There is also the title "Sender-Initiated File Transfer" or SIFT,
 which usually refers to an offline or batch variant of the protocol.
-
-Note:
-This project has been moved and now lives at
-https://github.com/trothtech/uft/
-
-The new repository has both POSIX and VM/CMS components.
-
-You *really* should be looking to the other repository, not here.
 
 ## UFT for POSIX Systems
 
@@ -45,17 +41,6 @@ Files received by the UFT server are held in a sort of "delivery dock"
 for disposition by the target user. There are two commands: `rls`
 to list files waiting on the dock, and `rcv` to receive selected files.
 
-
-
-
-
-
-
-
-
-
-
-
 ## UFT for VM/CMS
 
 UFT mimics the operation of IBM's RSCS and other IBM mainframe
@@ -67,8 +52,8 @@ See the `cms` directory.
 
 The VM/CMS UFT implementation is intended to work with existing
 commands and utilities on the VM/CMS system. `rdrlist` and `receive`
-remain unchanged. There is a UFT-enabled `sf` command which can be used
-in place of stock `sendfile`.
+remain unchanged. There is a UFT-enabled `sf` command
+which can be used in place of stock `sendfile`.
 
 ## Response Codes
 
