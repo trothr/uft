@@ -8,6 +8,16 @@
  *
  */
 
+#if defined(_WIN32) || defined(_WIN64)
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+ #include <windows.h>
+ #include <io.h>
+#else
+ #include <sys/socket.h>
+ #include <netdb.h>
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -19,13 +29,6 @@
 #include <unistd.h>
 
 #include "uft.h"
-
-#ifdef UFT_POSIX
- #include <sys/socket.h>
- #include <netdb.h>
-#else
- #include <winsock2.h>
-#endif
 
 char       *arg0;
 int         tffd,     cffd,     dffd,     effd;       /* file handles */
@@ -108,12 +111,12 @@ int main(int argc,char*argv[])
 
     /* work from the UFT spool directory */
     n = chdir(UFT_SPOOLDIR);
-    if (n < 0)
+    if (n != 0)
       { (void) sprintf(temp,"522 spool directory unavailable (%d).",errno);
 /*      (void) sprintm(temp,"uft","srv",522,'E',0,NULL); */
         (void) uftdstat(1,temp);    /* error to client but no logging */
 #ifdef _UFT_DEBUG
-    fprintf(stderr,"UFTD: 522 spool dir unavail\n");
+    fprintf(stderr,"UFTD: 522 spool directory unavailable\n");
 #endif
         return 1; }                    /* spool directory unavailable */
     /* Leave control in the sysadmin's hands as much as possible.     */
@@ -174,7 +177,8 @@ int main(int argc,char*argv[])
     (void) uftdstat(1,p);        /* 200 series herald indicates UFT/2 */
 
     /* who's on the other end of the socket? */
-    (void) tcpident(0,from,256);      /* IDENT got a bad rap and died */
+//  (void) tcpident(0,from,256);      /* IDENT got a bad rap and died */
+    rc = uftc_peer(0,from,sizeof(from)-1);        /* fd 0 is our peer */
     (void) sprintf(line,"REMOTE=%s",from);
     (void) uftx_putline(tffd,line,0);                      /* logging */
     (void) strncpy(uftfile0.from,from,sizeof(uftfile0.from));
@@ -233,15 +237,13 @@ int main(int argc,char*argv[])
 
 /* FIXME: we need a safety scan both here and "traditional" (below)   */
 /* the following are explicitly okay:
-    CLASS
-    COPY
-    DATE
+    CLASS               okay
+    DATE                okay
     DEST
     DIST
     FCB
-    FORM
+    FORM                okay
     GROUP
-    HOLD
     NAME
     NOTIFY
     OWNER
@@ -249,9 +251,9 @@ int main(int argc,char*argv[])
     RECLEN
     SEQ
     TITLE
-    UCS
+    UCS                 okay
     VERSION
-    XDATE
+    XDATE               okay
     XPERM
  */
 
@@ -322,20 +324,20 @@ int main(int argc,char*argv[])
 
         /* --------------------------------------------- HELP command */
         if (uftx_abbrev("HELP",p,1))
-          { (void) sprintf(temp,"114 HELP: protocol: %s",UFT_PROTOCOL);
+          { (void) sprintf(temp,"614 HELP: protocol: %s",UFT_PROTOCOL);
             (void) tcpputs(1,temp);
 #ifndef         UFT_ANONYMOUS
-            (void) sprintf(temp,"114 HELP: server: %s",UFT_VERSION);
+            (void) sprintf(temp,"614 HELP: server: %s",UFT_VERSION);
             (void) tcpputs(1,temp);
 #endif
-            (void) tcpputs(1,"114 HELP: commands:");
-            (void) tcpputs(1,"114 HELP: FILE <size> <from> <auth>");
-            (void) tcpputs(1,"114 HELP: USER <recipient>");
-            (void) tcpputs(1,"114 HELP: TYPE <filetype>");
-            (void) tcpputs(1,"114 HELP: NAME <filename>");
-            (void) tcpputs(1,"114 HELP: DATA <burst_size>");
-            (void) tcpputs(1,"114 HELP: EOF");
-            (void) tcpputs(1,"114 HELP: QUIT");
+            (void) tcpputs(1,"614 HELP: commands:");
+            (void) tcpputs(1,"614 HELP: FILE <size> <from> <auth>");
+            (void) tcpputs(1,"614 HELP: USER <recipient>");
+            (void) tcpputs(1,"614 HELP: TYPE <filetype>");
+            (void) tcpputs(1,"614 HELP: NAME <filename>");
+            (void) tcpputs(1,"614 HELP: DATA <burst_size>");
+            (void) tcpputs(1,"614 HELP: EOF");
+            (void) tcpputs(1,"614 HELP: QUIT");
             (void) tcpputs(1,"214 HELP: end of HELP");
             continue;                           /* continue after ACK */
           }
@@ -571,7 +573,7 @@ int main(int argc,char*argv[])
             n = -1;                /* ... and lose the spoolid number */
 
             /* get back into the UFT spool directory */
-            if (chdir(UFT_SPOOLDIR) < 0) break;   /* FIXME: should be 5xx */
+            if (chdir(UFT_SPOOLDIR) != 0) break;   /* FIXME: should be 5xx */
 
             /* all clear; kill the log file */
             close(tffd); uftlogfd = tffd = -1; unlink(tffn);
@@ -618,7 +620,7 @@ int main(int argc,char*argv[])
 #endif
 
             /* get back into the UFT spool directory */
-            if (chdir(UFT_SPOOLDIR) < 0) break;   /* FIXME: should be 5xx */
+            if (chdir(UFT_SPOOLDIR) != 0) break;   /* FIXME: should be 5xx */
 
             /* all clear; now kill the log file */
             close(tffd); uftlogfd = tffd = -1; unlink(tffn);
@@ -723,16 +725,20 @@ int main(int argc,char*argv[])
           }
 
         /* known attribute? --------------------- other META commands */
-        if (uftx_abbrev("DATE",p,2)  |   uftx_abbrev("XDATE",p,2) |
-            uftx_abbrev("PERM",p,4)  |   uftx_abbrev("CHARSET",p,5) |
-            uftx_abbrev("UCS",p,3)   |   uftx_abbrev("TRAIN",p,2) |
-            uftx_abbrev("RECFMT",p,4) |  uftx_abbrev("RECORD_FORMAT",p,8) |
-            uftx_abbrev("LRECLEN",p,5) |
-            uftx_abbrev("RECLEN",p,4) |  uftx_abbrev("RECORD_LENGTH",p,8) |
-            uftx_abbrev("CLASS",p,2) |   uftx_abbrev("FORM",p,2)|
-            uftx_abbrev("FCB",p,3)   |   uftx_abbrev("CTAPE",p,2) |
+        if (uftx_abbrev("DATE",p,2)     | uftx_abbrev("XDATE",p,2)     |
+            uftx_abbrev("PERM",p,4)     | uftx_abbrev("CHARSET",p,5)   |
+            uftx_abbrev("UCS",p,3)      | uftx_abbrev("TRAIN",p,2)     |
+            uftx_abbrev("RECFMT",p,4)   | uftx_abbrev("RECORD_FORMAT",p,8) |
+            uftx_abbrev("LRECLEN",p,5)  |
+            uftx_abbrev("RECLEN",p,4)   | uftx_abbrev("RECORD_LENGTH",p,8) |
+            uftx_abbrev("CLASS",p,2)    | uftx_abbrev("FORM",p,2)      |
+            uftx_abbrev("FCB",p,3)      | uftx_abbrev("CTAPE",p,2)     |
             uftx_abbrev("DESTINATION",p,4) |
             uftx_abbrev("DISTRIBUTION",p,4) |
+            uftx_abbrev("COPY",p,3)     | uftx_abbrev("COPIES",p,2)    |
+            uftx_abbrev("HOLD",p,4)     |
+            uftx_abbrev("KEEP",p,4)     |
+            uftx_abbrev("TAG",p,4)      |
             uftx_abbrev("TITLE",p,2))
           { /*  put this variable into the control file  */
             (void) sprintf(temp,"%s='%s'",p,q);

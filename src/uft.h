@@ -12,10 +12,18 @@
 #include <sys/types.h>
 
 #if defined(_WIN32) || defined(_WIN64)
- typedef int uid_t;
- typedef int gid_t;
+/* typedef int uid_t;
+   typedef int gid_t; */
+ /* the SPOOLDIR has a sub-directory for each recipient               */
+ #ifndef        UFT_SPOOLDIR
+  #define       UFT_SPOOLDIR    "C:/ProgramData/uft"
+ #endif
 #else
  #define UFT_POSIX
+ /* the SPOOLDIR has a sub-directory for each recipient               */
+ #ifndef        UFT_SPOOLDIR
+  #define       UFT_SPOOLDIR    "/usr/spool/uft"
+ #endif
 #endif
 
 #include "tcpio.h"
@@ -27,23 +35,17 @@
 /* the version number and copyright */
 #define         UFT_PROTOCOL    "UFT/2"
 #ifndef         UFT_VERSION
- #define        UFT_VERSION     "POSIXUFT/2.0.15"
+ #define        UFT_VERSION     "POSIXUFT/2.1.0"
 #endif
 #define         UFT_COPYRIGHT   "© Copyright 1995-2025 Richard M. Troth"
-#define         UFT_VRM         "2.0.15"
-#define    UFT_VERINT    (((2) << 24) + ((0) << 16) + ((15) << 8) + (0))
+#define         UFT_VRM         "2.1.0"
+#define    UFT_VERINT    (((2) << 24) + ((1) << 16) + ((0) << 8) + (0))
 
 #ifndef         UFT_TAG
  #define        UFT_TAG         "UFT"
 #endif
 
 /* server constants follow */
-
-/* the SPOOLDIR has a sub-directory for each recipient                */
-#ifndef         UFT_SPOOLDIR
- #define        UFT_SPOOLDIR    "/var/spool/uft"
-             /*                 "C:/ProgramData/uft" */
-#endif
 
 #ifndef         UFT_GID
  #define        UFT_GID         0
@@ -77,14 +79,14 @@
 #define         UFT_NOTRANS     0x1000         /* translation not fit */
 
 /* registered port for this service */
-#define         UFT_PORT        608
-#define         IDENT_PORT      113
+#define         UFT_PORT         608
+#define         IDENT_PORT       113
+#define         UFT_ANONPORT    1608
+#define         UFT_SECPORT     5608
 
 /* define       UFT_BUFSIZ      64512 */
 /* reduced from 64K-512 to 32K-512 for more reliable file transfer    */
 #define         UFT_BUFSIZ      32256
-
-#define         UFT_SYSLOG_FACILITY     LOG_UUCP
 
 /* the following struct is best used for active UFT files             */
 typedef struct  UFTFILE {
@@ -295,7 +297,6 @@ tqcdhkm--- cpy user     host         size year mm dd time  sid  name
                         } UFTSTAT ;
 
 /*
-
         unsigned long  st_dev;          see uft_rudev
         unsigned long  st_ino;          OKAY
         unsigned short st_mode;         OKAY
@@ -314,6 +315,8 @@ tqcdhkm--- cpy user     host         size year mm dd time  sid  name
         unsigned long  st_ctime_nsec;   N/A
  */
 
+/* function prototypes follow */
+
 ssize_t getuftentries(int,char*,size_t,off_t*);
 /* ssize_t getuftentries(int fd,char*buf,size_t nbytes,off_t*basep);  */
 
@@ -326,28 +329,29 @@ int uftddata(int,int,int);
 int uftdnext();
 int uftduser(char*);
 int uftdmove(int,int);
-int uftdimsg(char*,char*,char*,char*);                  /* deprecated */
-int uftdlmsg(char*,char*,char*,char*);                  /* deprecated */
 int uftdlist(int,char*);
-
 int uftctext(int,char*,int);
-
 char*uftcprot(mode_t);
-
 int uftx_abbrev(char*,char*,int);
 
 /* functions from the library */
+
 int uftx_message(char*,int,int,char*,int,char*[]);
+int uftx_msgprtl(int,char*,int,char*[]);
+
 int uftd_message(char*,char*);          /* FKA msglocal(user,text)    */
-char*uftx_home(char*);
+char*uftx_home(char*);                 /* home directory of this user */
 int msgd_umsg(char*,char*,char*);                 /* user, text, from */
 int uftx_getline(int,char*,int);        /* sock or fd, buffer, buflen */
 int uftx_putline(int,char*,int);        /* sock or fd, buffer, buflen */
 
+int msgd_xmsg_sock(char*,char*,int);
+int msgd_xmsg_fifo(char*,char*,int);
+
 char*uftx_user();
-char*uftx_getenv(char*,char*);
-char*uftx_basename(char*);
-char*uftx_parse1(char*);
+char*uftx_getenv(char*,char*);       /* extract a var=val from buffer */
+char*uftx_basename(char*);          /* point to basename of file path */
+char*uftx_parse1(char*);          /* point to, and delimit, one token */
 
 int msgc_uft(char*,char*);
 int msgc_rdm(char*,char*);
@@ -360,22 +364,31 @@ int uftd_agck(char*);
 int uftc_wack(int,char*,int);                         /* wait for ACK */
 
 int uftx_proxy(char*,char*,int*);
-int uft_stat(char*,struct UFTSTAT*);
-int uft_purge(struct UFTSTAT*);
-int uftx_atoi(char*);
+int uft_stat(char*,struct UFTSTAT*);         /* info about a UFT file */
+int uft_purge(struct UFTSTAT*);               /* discard the UFT file */
+int uftx_atoi(char*);                         /* character to integer */
 int uftx_wtl(int,char*,int);                      /* write text local */
 int uftx_e2l(int,char*,int);                 /* write EBCDIC to local */
 int uftx_getndr(int,struct UFTNDIO*,int*,char**,int*);     /* netdata */
 int uftx_ndfd(int,int,int);                 /* Netdata stream via FDs */
-int uftx_isbinary(char*,int);
+int uftx_isbinary(char*,int);         /* content appears to be binary */
+
+int uftx_autotype(char*,int,int*);          /* set dotran/notran flag */
+
+int uftx_ccap(int*,char*,char*,int,char*,int);  /* UFT command output */
+int saprint(void*,int);                             /* sockaddr print */
 
 void uftdstat(int,char*);
 
-int uftdcpq(char*,char*,int);
+int uftdcpq(char*,char*,int);                  /* issue a CPQ command */
 int uftdl699(int,char*);
 
-int uftc_open(char*,char*,int*);
-int uftc_close(int*);
+int uftc_open(char*,char*,int*);          /* open a client connection */
+int uftc_peer(int,char*,int);         /* info about this network peer */
+int uftc_close(int*);                    /* close a client connection */
+
+int uftx_b64enc(char*,int,char*,int);
+int uftx_b64dec(char*,int,char*,int);
 
 int sendimsg(char*,char*);
 int msglocal(char*,char*);

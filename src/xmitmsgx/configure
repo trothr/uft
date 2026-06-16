@@ -68,7 +68,7 @@ LOCDIR=$PREFIX/share/locale                               # for xmitmsgx
 #
 # identify this environment/system
 US=`uname -s | sed 's#/##g'`
-UM=`uname -m | sed 's#^i.86$#i386#' | sed 's#^armv.l$#arm#'`
+UM=`uname -m | sed 's#^i.86$#i386#' | sed 's#^armv.l$#arm#' | sed 's#^evbarm$#arm#'`
 case "$US" in
 
     Darwin)
@@ -80,7 +80,7 @@ case "$US" in
             SHLIB_EXT=".dylib"
         fi
         ;;
-    Linux|FreeBSD)
+    Linux|FreeBSD|NetBSD)
         CFLAGS="$CFLAGS -fPIC"
 #       LDFLAGS=
         SHFLAGS="$LDFLAGS -shared"
@@ -95,12 +95,12 @@ case "$US" in
         US="CYGWIN"
         SHFLAGS="$LDFLAGS -shared"
         ;;
-    MINGW*)
+    MINGW*|MSYS*)
         US="MINGW"
-        if [ "$UM" = "x86_64" ] ; then CFLAGS="$CFLAGS -m64"
-                                  else CFLAGS="$CFLAGS -m32" ; fi
-        LIBS="-lwsock32"
-        LDFLAGS="$LDFLAGS -lwsock32"
+        if [ "$UM" = "x86_64" ] ; then CFLAGS="$CFLAGS -D_WIN64 -m64"
+                                  else CFLAGS="$CFLAGS -D_WIN32 -m32" ; fi
+        LIBS="-lwsock32 -lws2_32"
+        LDFLAGS="$LDFLAGS $LIBS"
         SHFLAGS="$LDFLAGS -shared"
         ;;
     AIX)
@@ -133,11 +133,16 @@ esac
 #
 # determine the locale
 if [ -z "$LOCALE" -a ! -z "$LANG" ] ; then LOCALE="$LANG" ; fi
+if [ -z "$LOCALE" -a ! -z "$LC_CTYPE" ] ; then LOCALE="$LC_CTYPE" ; fi
+if [ -z "$LOCALE" -a ! -z "$LC_MESSAGES" ] ; then LOCALE="$LC_MESSAGES" ; fi
+if [ -z "$LOCALE" -a ! -z "$LC_ALL" ] ; then LOCALE="$LC_ALL" ; fi
+if [ -z "$LOCALE" -a ! -z "$LANGUAGE" ] ; then LOCALE="$LANGUAGE" ; fi
 # perform locale clean-up
 LOCALE=`echo "$LOCALE" | awk -F. '{print $1}'`
-#LOCALE examples:
+# LOCALE examples:
 #/usr/share/locale/
 #/usr/lib/nls/msg/
+#/usr/lib/locale/
 #/usr/share/nls/
 #LOCALE=en_US.UTF-8
 #LOCALE=en_US

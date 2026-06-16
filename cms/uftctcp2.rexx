@@ -7,7 +7,8 @@
  *              to avoid mixing Rexx/Sockets with CMS Pipelines.
  *      Author: Rick Troth, Cedarville, Ohio, USA
  *        Date: 2025-09-15
- *    See also: UFTCTCP REXX, UFTCFILE, UFTCUSER, UFTCHOST
+ *    See also: UFTCFILE, UFTCUSER, UFTCHOST, UFTXDSPL
+ *    Revision: 2.0.17
  *
  *        Note: UFTCTCP2 is not a user-level pipeline stage.
  *
@@ -17,7 +18,8 @@
 
 /* identify this stage to itself */
 Parse Source . . arg0 .
-argl = '*' || arg0 || ':'                                  /* logging */
+argl = '*' || arg0 || ':'                              /* for logging */
+arge = argl "ERROR:"
 
 /* parse command line arguments */
 Parse Arg host port . '(' opts ')' .
@@ -41,25 +43,25 @@ If hisaddr = "" Then Do
 
     /* Initialize Rexx/Sockets */
     temp = "UFT" || Right(Time('S'),5,'0')
-    Parse Value Socket('Initialize',temp) With rc rs
+    Parse Value Socket('Initialize',temp,,tcpid) With rc rs
     If rc ^= 0 Then Do
         Parse Var rs errno etext
         If errno ^= "ESUBTASKALREADYACTIVE" Then Do
-            tcprc = rc ; 'OUTPUT' argl rs                  /* logging */
-            Exit tcprc ; End
+            tcprc = rc ; 'OUTPUT' arge rc rs               /* logging */
+            Exit tcprc ; End                            /* error exit */
         Call Socket 'Terminate', temp
-        Parse Value Socket('Initialize',temp) With rc rs
+        Parse Value Socket('Initialize',temp,,tcpid) With rc rs
         If rc ^= 0 Then Do
-            tcprc = rc ; 'OUTPUT' argl rs                  /* logging */
-            Exit tcprc ; End
+            tcprc = rc ; 'OUTPUT' arge rc rs               /* logging */
+            Exit tcprc ; End                            /* error exit */
     End /* If .. Do */
 
     /* address-from-name not yet known, try the resolver */
     Parse Value Socket('Resolve',host) With rc rs
     If rc ^= 0 Then Do
-        tcprc = rc ; 'OUTPUT' argl rs                      /* logging */
+        tcprc = rc ; 'OUTPUT' arge rc rs                   /* logging */
         Call Socket 'Terminate', temp
-        Exit tcprc ; End
+        Exit tcprc ; End                                /* error exit */
     Call Socket 'Terminate', temp       /* no Rexx/Sockets here after */
 
     /* if that worked then save this IP address for the next go-round */
@@ -72,13 +74,15 @@ If hisaddr = "" Then Do
 
 End /* If .. Do */
 
-/* set-up a stream for the TCP/IP client driver */
+/* establish a dedicated stream for TCP/IP client driver traffic      */
 'ADDSTREAM BOTH TCP'
-If rc ^= 0 Then Exit rc
+If rc ^= 0 Then Do
+    'OUTPUT' arge rc "ADDSTREAM" ; Exit rc ; End
 
 /* connect that TCP/IP client driver to contact the UFT server        */
 'ADDPIPE *.OUTPUT.TCP: | TCPCLIENT' hisaddr port tcpid '| *.INPUT.TCP:'
-If rc ^= 0 Then Exit rc
+If rc ^= 0 Then Do
+    'OUTPUT' arge rc "ADDPIPE" ; Exit rc ; End
 
 /* load ASCII/EBCDIC translate tables                                 */
 /* 'CALLPIPE < POSIX TCPXLBIN | STEM AEX.' ; If rc ^= 0 Then ...      */
@@ -100,27 +104,38 @@ If rc ^= 0 Then Exit rc
          || '5CF7535455565758595AB2D4D6D2D3D530313233343536373839B3DBDCD9DA9F'x
 aex.1 = XRANGE('00'x,'FF'x)     /* need this even if we have TCPXLBIN */
 
-buffer = ""
-u = "-"
-qs = 65024
-qs = 32256
-grc = 0
+buffer = ""             /* initially empty input (from server) buffer */
+u = "-"                 /* unspecified user */
+qs = 65024              /* experimental burst size */
+qs = 32256              /* recommended burst size */
+grc = 0                 /* a global return code */
 
 /* read the herald from the server - standard for UFT since forever   */
+/* a UFT/1 server should send a 1xx herald                            */
+/* a UFT/2 server should send a 2xx herald                            */
 line = getline()
-If grc ^= 0 Then Exit grc
+If grc ^= 0 Then Do ; 'OUTPUT' arge grc "getline()" ; Exit grc ; End
+
+/* redundant check that we actually got something from the server     */
 retry = 5 ; Do While line = "" & retry > 0
                      line = getline() ; retry = retry - 1 ; End
 If line = "" Then Do
+    Address "COMMAND" 'XMITMSG 44 (APPLID UFT CALLER TCP ERRMSG VAR'
+    'OUTPUT' arge 1 "getline() ;" message.1
     Address "COMMAND" 'XMITMSG 44 (APPLID UFT CALLER TCP ERRMSG'
     Exit 1
 End /* If .. Do */
 
+/* parse the herald for data burst size hint                          */
+Parse Var line t1 . t3 . bs .                    /* two tags to check */
+If Datatype(t1,"W") & Left(t1,1) = "2" ,
+    & Left(t3,3) = "UFT" & Datatype(bs,"W") Then qs = bs
+
 /* does the server want UFT/1 or UFT/2? (and we hope for the latter)  */
 If Left(line,1) = '2' Then uft = 2
                       Else uft = 1        /* really REALLY not likely */
-'OUTPUT' line
-'OUTPUT' argl "UFT level" uft
+'OUTPUT' line                                              /* logging */
+'OUTPUT' argl "UFT level" uft                              /* logging */
 
 type = "";  cc = ""
 /* send the commands (parmeters; ie: the "meta" file) and controls    */
@@ -130,7 +145,7 @@ Do Forever
     If rc ^= 0 Then Leave
 
     /* echo the command from our input stage and then parse it        */
-    'OUTPUT' line
+/*  'OUTPUT' line                                          ** logging */
     Parse Upper Var line cmnd .
     If cmnd = "META" Then Do
         Parse Var line . line
@@ -146,40 +161,41 @@ Do Forever
     If Abbrev("TYPE",cmnd,4) & ^meta Then ,
         Parse Upper Var line . type cc .
 
-    /* if user specified on command line then do NOT sent from stream */
+    /* if user specified on command line then do NOT send from stream */
     If Abbrev("USER",cmnd,4) & ^meta & user ^= "" Then Do
-        'OUTPUT' argl "USER statement overridden/ignored"
+        'OUTPUT' argl "USER statement overridden/ignored"  /* logging */
         'READTO'
         Iterate
     End /* If .. Do */
 
-    /* but do collect USER commands if none specified on command line */
+    /* but do collect USER commands if not specified on command line  */
     If Abbrev("USER",cmnd,4) & ^meta Then Parse Var line . u .
 
     /* watch the swizzle - FILE statement might signal USER statement */
     If Abbrev("FILE",cmnd,4) & ^meta & user ^= "" Then Do
+        'OUTPUT' line                                      /* logging */
         Call PUTLINE line          /* go ahead and send FILE stmt now */
         Parse Value uftcwack() With ac as        /* and expect an ACK */
         If ac ^= 0 Then Do
-            'OUTPUT' as ; rc = ac ; Leave ; End
+            'OUTPUT' arge ac as ; rc = ac ; Leave ; End
         /* force next line sent to be the requisite USER statement    */
         line = "USER" user
         'OUTPUT' line
     End
 
     /* send a packet */
+    If meta Then line = "META" line
+    'OUTPUT' line                                          /* logging */
     Call PUTLINE line
 
-    /* for some commands, DON'T wait for ACK */
+    /* for certain commands (e.g., comments), DON'T wait for ACK      */
     If Left(line,1) = '*' | Left(line,1) = '#' Then Do
-        'READTO'
-        Iterate
-    End /* If .. Do */
+        'READTO' ; Iterate ; End
 
     /* Recover some response (ACK or NAK) */
     Parse Value uftcwack() With ac as
     If ac ^= 0 Then Do
-        'OUTPUT' as
+        'OUTPUT' arge ac as
         rc = ac
         If Left(as,1) ^= "4" Then Leave          /* RC 4 is non fatal */
     End /* If .. Do */
@@ -243,12 +259,13 @@ Do Forever
     If rc ^= 0 Then Leave
 
     /* tell the server it's coming */
+    'OUTPUT' "DATA" Length(data)                           /* logging */
     Call PUTLINE "DATA" Length(data)
 
     If uft = 2 Then Do
         /* recover some response (ACK or NAK) */
         Parse Value uftcwack() With ac as
-        If ac ^= 0 Then Do ; 'OUTPUT' as ; rc = ac ; Leave ; End
+        If ac ^= 0 Then Do ; 'OUTPUT' arge ac as ; rc = ac ; Leave ; End
     End /* If .. Do */
 
     /* send the "burst" */
@@ -257,7 +274,7 @@ Do Forever
 
     /* Recover some response (ACK or NAK) */
     Parse Value uftcwack() With ac as
-    If ac ^= 0 Then Do ; 'OUTPUT' as ; rc = ac ; Leave ; End
+    If ac ^= 0 Then Do ; 'OUTPUT' arge ac as ; rc = ac ; Leave ; End
 
     j = j + 1                               /* increment record count */
     i = i + Length(data)                      /* increment byte count */
@@ -270,22 +287,22 @@ End /* Do Forever */
 If rc ^= 0 & rc ^= 12 Then Exit rc
 
 /* log this completion */
-'OUTPUT' argl j "records sent;" i "bytes sent"
+'OUTPUT' argl j "records sent;" i "bytes sent"             /* logging */
 
 /* provide an explicit 8712 for clarity saying "the file got through" */
 date = Date("S") || "-" || Time()
 If user = "" Then user = u
 Address "COMMAND" 'XMITMSG 8712 "*" USER HOST DATE' ,
                         '(APPLID UFT CALLER TCP VAR'
-If rc = 0 Then 'OUTPUT' argl message.1
+If rc = 0 Then 'OUTPUT' argl message.1                     /* logging */
 
 /* send an EOF command */
-'OUTPUT' "EOF"
+'OUTPUT' "EOF"                                             /* logging */
 Call PUTLINE "EOF"
 Call UFTCWACK                      /* ignoring the response condition */
 
 /* send a QUIT command */
-'OUTPUT' "QUIT"
+'OUTPUT' "QUIT"                                            /* logging */
 Call PUTLINE "QUIT"
 Call UFTCWACK                      /* ignoring the response condition */
 
@@ -301,24 +318,22 @@ Return
  */
 GETLINE: Procedure Expose buffer uft aex. grc
 
-'SELECT INPUT TCP'
+'SELECT INPUT TCP'                      /* switch input to TCP stream */
 
 retry = 5
 Do While POS('0A'x,buffer) = 0 & POS('00'x,buffer) = 0 ,
                                & retry > 0
-
     'PEEKTO RECORD'
     If rc = 0 Then Do ; buffer = buffer || record ; 'READTO' ; End
-              Else Do ; grc = rc ; Return ; End
+              Else Do ; grc = rc ; Return "" ; End
     retry = retry - 1
-
 End /* Do While */
 
-Parse Var buffer line '0A'x buffer
-Parse Var line line '0D'x .
-Parse Var line line '00'x .
+Parse Var buffer line '0A'x buffer                /* split text at LF */
+Parse Var line line '0D'x .              /* strip off any trailing CR */
+Parse Var line line '00'x .            /* strip off any trailing NULL */
 
-'SELECT INPUT 0'
+'SELECT INPUT 0'               /* switch input back to primary stream */
 
 Return Translate(line,aex.2,aex.1)
 
@@ -329,8 +344,8 @@ Return Translate(line,aex.2,aex.1)
  */
 UFTCWACK: Procedure Expose buffer uft aex. grc
 Do Forever
-    line = getline() ; If grc ^= 0 Then Return 1
-    If line = "" Then line = getline() ; If grc ^= 0 Then Return 1
+    line = getline() ; If grc ^= 0 Then Return grc
+    If line = "" Then line = getline() ; If grc ^= 0 Then Return grc
 /*  If line = "" Then Return 0 "ACK (NULL)"                           */
     If line = "" Then Return 1 "ACK (NULL)"
     If Left(line,1) = '1' Then Iterate

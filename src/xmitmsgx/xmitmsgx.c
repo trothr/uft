@@ -20,30 +20,21 @@
 #include <errno.h>
 
 #if defined(_WIN32) || defined(_WIN64)
- #define  LOG_EMERG     0   /* system is unusable */
- #define  LOG_ALERT     1   /* action must be taken immediately */
- #define  LOG_CRIT      2   /* critical conditions */
- #define  LOG_ERR       3   /* error conditions */
- #define  LOG_WARNING   4   /* warning conditions */
- #define  LOG_NOTICE    5   /* normal but significant condition */
- #define  LOG_INFO      6   /* informational */
- #define  LOG_DEBUG     7   /* debug-level messages */
+ #include "xmmwin.c"
 #else
  #ifdef OECS
   #define __UU
  #endif
- #include <syslog.h>
- #define XMM_POSIX
+ #include "syslog.h"
 #endif
 
 #include <libgen.h>
 #include <ctype.h>
 
 #include "xmitmsgx.h"
-extern unsigned char *xmmprefix;    /* install prefix not appl prefix */
+extern char *xmmprefix;       /* install prefix not appliction prefix */
 
 /* These are the locale environment variables we will interrogate:    */
-unsigned
 char *localevars[] = {
                 "LANG",
                 "LC_CTYPE",
@@ -64,16 +55,28 @@ char *localevars[] = {
                 ""   };     /* empty string marks the end of the list */
 /* the syntax of the locale is                                        */
 /*              <LANGUAGE>_<TERRITORY>.<CODESET>[@<MODIFIERS>]        */
+/*   on Windoze <LANGUAGE>-<TERRITORY>.<CODESET>[@<MODIFIERS>]        */
 
 /* These are the directories where we might find locale support:      */
-unsigned
-char *localedirs[] = {
+char *localeoptd[] = {     /* opt (package) rooted locale directories */
                 "%s/share/locale/%s/%s.msgs",
                 "%s/lib/nls/msg/%s/%s.msgs",
                 "%s/lib/locale/%s/%s.msgs",
                 "%s/share/nls/%s/%s.msgs",
                 ""   };     /* empty string marks the end of the list */
-/*               prefix,      locale, applid                          */
+char *localedirs[] = {                   /* system locale directories */
+                "/usr/share/locale/%s/%s.msgs",
+                "/usr/lib/nls/msg/%s/%s.msgs",
+                "/usr/lib/locale/%s/%s.msgs",
+                "/usr/share/nls/%s/%s.msgs",
+#if defined(_WIN32) || defined(_WIN64)
+                "C:/Program Files/Common Files/System/%s/%s.msgs",
+                "C:/Program Files (x86)/Common Files/System/%s/%s.msgs",
+                "C:/Windows/System32/%s/%s.msgs",
+                "C:/Windows/%s/%s.msgs",
+#endif
+                ""   };     /* empty string marks the end of the list */
+/*               prefix, locale, applid                               */
 /*
       The xmopen() routine will search all of the above. We do not use
       a per-platform single path because any given platform might have
@@ -90,14 +93,17 @@ char *localedirs[] = {
       C:/Program Files/Common Files/System/en-US
       C:/Program Files (x86)/Common Files/System/en-US
       C:/Windows/System32/en-US
+      C:/Windows/System32/en-GB
+      C:/Windows/System32/en
       C:/Windows/en-US
  */
 
 static struct MSGSTRUCT *msglobal = NULL, msstatic;
 
-/* ---------------------------------------------------------------- OPEN
+/* -------------------------------------------------------------- XMOPEN
  * Open the messages file, read it, get ready for service.
- * Returns: zero upon successful operation, or 813 if cannot open the repository file
+ * Returns: zero upon successful operation, or 813 if cannot open
+ * the repository file.
  * The VM/CMS counterpart does 'SET LANG' to load the messages file.
  * See also: the catopen() call on many POSIX systems.
  *
@@ -105,13 +111,13 @@ static struct MSGSTRUCT *msglobal = NULL, msstatic;
  * This routine looks in several places using a variety of names.
  * If we cannot find the messages file then we cannot proceed.
  */
-int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
+int xmopen(char*file,int opts,struct MSGSTRUCT*ms)
   {
     int rc, fd, memsize, i, j, filesize;
-    unsigned char *p, *q, *locale, filename[256];
+    char *p, *q, *locale, filename[256];
     struct stat statbuf;
 
-    static unsigned char ampersand[2] = "&";   /* default escape char */
+    static char ampersand[2] = "&";       /* default escape character */
 
     /* NULL struct pointer means to use global static storage         *
      * unless it was already established, in which case "busy".       */
@@ -137,7 +143,7 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
     while (*localevars[i] != 0x00) {         /* localevars loop 1 top */
     /* if that didn't work then try filename plus locale variables    */
     if (rc != 0) {
-        locale = (unsigned char*)getenv(localevars[i]);
+        locale = getenv(localevars[i]);
         if (locale != NULL && *locale != 0x00) {
             (void) strncpy(ms->locale,locale,sizeof(ms->locale)-1);
             (void) snprintf(filename,sizeof(filename)-1,
@@ -153,12 +159,21 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
                 "%s.%s.msgs",file,ms->locale);
             filename[sizeof(filename)-1] = 0x00;
             rc = stat(filename,&statbuf); } }
+
+#if defined(_WIN32) || defined(_WIN64)
+            /* if that didn't work then try Windows style locale      */
+            if (rc != 0) {
+                p = ms->locale; if (p[2] == '_') p[2] = '-';
+            (void) snprintf(filename,sizeof(filename)-1,
+                "%s.%s.msgs",file,ms->locale);
+            filename[sizeof(filename)-1] = 0x00;
+            rc = stat(filename,&statbuf); }
+#endif
                  }
         i++;                       }         /* localevars loop 1 end */
 
-    /* beyond this point, ignore any prepended path info              */
+    /* beyond this point, ignore any prepended path info ------------ */
     file = basename(file);
-
     /* NOTE: in the following several stanzas, we attempt variations  *
      *       with several standard locations for locale content       */
 
@@ -169,54 +184,111 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
         if (locale != NULL && *locale != 0x00) {
             (void) strncpy(ms->locale,locale,sizeof(ms->locale)-1); }
 
+        j = 0; if (rc != 0)                  /* localeOPTD loop 1 set */
+        while (*localeoptd[j] != 0x00) {     /* localeOPTD loop 1 top */
+            if (rc != 0) {
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],xmmprefix,ms->locale,file);
+                rc = stat(filename,&statbuf); }
+            if (rc != 0) {                               /* redundant */
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],"/usr",ms->locale,file);
+                rc = stat(filename,&statbuf); }
+
+            /* if that didn't work then try removing locale "at" qual */
+            for (p = ms->locale; *p != 0x00 && *p != '@'; p++);
+            if (*p != 0x00) *p = 0x00;             /* modified locale */
+            if (rc != 0) {
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],xmmprefix,ms->locale,file);
+                rc = stat(filename,&statbuf); }
+            if (rc != 0) {                               /* redundant */
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],"/usr",ms->locale,file);
+                rc = stat(filename,&statbuf); }
+
+            /* if that didn't work then try removing dot qualifier    */
+            for (p = ms->locale; *p != 0x00 && *p != '.'; p++);
+            if (*p != 0x00) *p = 0x00;             /* modified locale */
+            if (rc != 0) {
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],xmmprefix,ms->locale,file);
+                rc = stat(filename,&statbuf); }
+            if (rc != 0) {                               /* redundant */
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],"/usr",ms->locale,file);
+                rc = stat(filename,&statbuf); }
+
+#if defined(_WIN32) || defined(_WIN64)
+            /* if that didn't work then try Windows style locale      */
+            p = ms->locale; if (p[2] == '_') p[2] = '-';
+            if (rc != 0) {
+                snprintf(filename,sizeof(filename)-1,
+                    localeoptd[j],xmmprefix,ms->locale,file);
+                rc = stat(filename,&statbuf); }
+#endif
+
+            j++;                       }     /* localeOPTD loop 1 end */
+
+        /* if that didn't work re-try locale searching system dirs    */
+        locale = getenv(localevars[i]);
+        if (locale != NULL && *locale != 0x00) {
+            (void) strncpy(ms->locale,locale,sizeof(ms->locale)-1); }
+
         j = 0; if (rc != 0)                  /* localeDIRs loop 1 set */
         while (*localedirs[j] != 0x00) {     /* localeDIRs loop 1 top */
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],xmmprefix,ms->locale,file);
+                localedirs[j],ms->locale,file);
             rc = stat(filename,&statbuf); }
+
+            /* if that didn't work then try removing locale "at" qual */
+            for (p = ms->locale; *p != 0x00 && *p != '@'; p++);
+            if (*p != 0x00) *p = 0x00;             /* modified locale */
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],"/usr",ms->locale,file);
+                localedirs[j],ms->locale,file);
             rc = stat(filename,&statbuf); }
+
+            /* if that didn't work then try removing dot qualifier    */
+            for (p = ms->locale; *p != 0x00 && *p != '.'; p++);
+            if (*p != 0x00) *p = 0x00;             /* modified locale */
+            if (rc != 0) {
+                snprintf(filename,sizeof(filename)-1,
+                    localedirs[j],ms->locale,file);
+                rc = stat(filename,&statbuf); }
+
+#if defined(_WIN32) || defined(_WIN64)
+            /* if that didn't work then try Windows style locale      */
+            p = ms->locale; if (p[2] == '_') p[2] = '-';
+            if (rc != 0) {
+                snprintf(filename,sizeof(filename)-1,
+                    localedirs[j],ms->locale,file);
+                rc = stat(filename,&statbuf); }
+#endif
+
             j++;                       }     /* localeDIRs loop 1 end */
 
-            /* if that didn't work then try removing locale at qual   */
-/*          if (rc != 0) {                                            */
-/*              for (p = ms->locale; *p != 0x00 && *p != '@'; p++);   */
-/*              if (*p != 0x00) { *p = 0x00;                          */
-                                             /* localeDIRs loop 2 top */
-                                             /* localeDIRs loop 2 end */
+/* FIXME from here to end of search logic */
 
-        /* if that didn't work then try removing locale dot qualifier */
-        for (p = ms->locale; *p != 0x00 && *p != '.'; p++);
-        if (*p != 0x00) *p = 0x00;                 /* modified locale */
 
-        j = 0; if (rc != 0)                  /* localeDIRs loop 3 set */
-        while (*localedirs[j] != 0x00) {     /* localeDIRs loop 3 top */
-            if (rc != 0) {
-            snprintf(filename,sizeof(filename)-1,
-                localedirs[j],xmmprefix,ms->locale,file);
-            rc = stat(filename,&statbuf); }
-            if (rc != 0) {
-            snprintf(filename,sizeof(filename)-1,
-                localedirs[j],"/usr",ms->locale,file);
-            rc = stat(filename,&statbuf); }
-            j++;                       }     /* localeDIRs loop 3 end */
+
+
+
 
         /* if that didn't work then try removing locale region qual   */
         for (p = ms->locale; *p != 0x00 && *p != '_'; p++);
         if (*p != 0x00) *p = 0x00;                 /* modified locale */
 
         j = 0; if (rc != 0)                  /* localeDIRs loop 4 set */
-        while (*localedirs[j] != 0x00) {     /* localeDIRs loop 4 top */
+        while (*localeoptd[j] != 0x00) {     /* localeDIRs loop 4 top */
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],xmmprefix,ms->locale,file);
+                localeoptd[j],xmmprefix,ms->locale,file);
             rc = stat(filename,&statbuf); }
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],"/usr",ms->locale,file);
+                localeoptd[j],"/usr",ms->locale,file);
             rc = stat(filename,&statbuf); }
             j++;                       }     /* localeDIRs loop 4 end */
 
@@ -224,14 +296,14 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
 
         strncpy(ms->locale,"C",sizeof(ms->locale)-1);   /* locale "C" */
         j = 0;                               /* localeDIRs loop 5 set */
-        while (*localedirs[j] != 0x00) {     /* localeDIRs loop 5 top */
+        while (*localeoptd[j] != 0x00) {     /* localeDIRs loop 5 top */
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],xmmprefix,ms->locale,file);
+                localeoptd[j],xmmprefix,ms->locale,file);
             rc = stat(filename,&statbuf); }
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],"/usr",ms->locale,file);
+                localeoptd[j],"/usr",ms->locale,file);
             rc = stat(filename,&statbuf); }
             j++;                       }     /* localeDIRs loop 5 end */
 
@@ -240,16 +312,18 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
         while (*localedirs[j] != 0x00) {     /* localeDIRs loop 6 top */
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],xmmprefix,ms->locale,file);
+                localeoptd[j],xmmprefix,ms->locale,file);
             rc = stat(filename,&statbuf); }
             if (rc != 0) {
             snprintf(filename,sizeof(filename)-1,
-                localedirs[j],"/usr",ms->locale,file);
+                localeoptd[j],"/usr",ms->locale,file);
             rc = stat(filename,&statbuf); }
             j++;                       }     /* localeDIRs loop 6 end */
 
     /* if we can't find the file then return the best error we know   */
-    if (rc != 0) { if (errno != 0) return errno; else return rc; }
+    if (rc != 0) { if (errno != 0) perror("xmopen(): stat()");
+                   fprintf(stderr,"message repository '%s' not found.\n",file);
+                   return 813; }
     /* There happens to be message number 813 for this condition.     */
 
     /* allocate memory to hold the message repository source file     */
@@ -321,7 +395,7 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
       }
 
     /* use basename of the file as the applid */
-    p = (unsigned char*) basename(ms->msgfile);
+    p = basename(ms->msgfile);
     (void) strncpy(ms->applid,p,sizeof(ms->applid)-1);
     p = ms->applid;
     while (*p != 0x00 && *p != '.') p++; *p = 0x00;
@@ -336,11 +410,9 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
 
     /* handle SYSLOG and record other options */
     ms->msgopts = opts;
-#ifdef XMM_POSIX
     if (ms->msgopts & MSGFLAG_SYSLOG) {
       /* figure out syslog identity */
-      openlog(ms->applid,LOG_PID,LOG_USER); }
-#endif
+      openlog(ms->applid,LOG_PID,MSGROUTE_DEFAULT); }
 
     /* default "caller" is the user, but is better as a function name */
 
@@ -360,7 +432,7 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
     return 0;
   }
 
-/* ---------------------------------------------------------------- MAKE
+/* -------------------------------------------------------------- XMMAKE
  * This is the central function: make a message.
  * All other print, string, and write functions are derivatives.
  * Returns: zero upon successful operation, ENOENT or 814 if no message
@@ -369,7 +441,7 @@ int xmopen(unsigned char*file,int opts,struct MSGSTRUCT*ms)
 int xmmake(struct MSGSTRUCT*ms)
   {
     int  rc, i, j;
-    unsigned char *p, *q;
+    char *p, *q;
 
     if (ms == NULL) return EINVAL; /* invalid argument */
     if (ms->msgnum <= 0) return EINVAL; /* invalid argument */
@@ -421,7 +493,6 @@ int xmmake(struct MSGSTRUCT*ms)
       }
     ms->msglen = i;
 
-#ifdef XMM_POSIX
     /* optional syslogging */
     if (ms->msgopts & MSGFLAG_SYSLOG) {
       if (ms->msglevel == 0) {
@@ -438,12 +509,11 @@ int xmmake(struct MSGSTRUCT*ms)
         default:                 ms->msglevel = LOG_INFO;              break;
                            } }
                                       }
-#endif
 
     return 0;
   }
 
-/* --------------------------------------------------------------- PRINT
+/* ------------------------------------------------------------- XMPRINT
  * Print a message, stdout or stderr depending on level/letter.
  * Newline automatically appended. Optionally SYSLOG the message.
  * Returns: number of characters printed, negative indicates error
@@ -451,11 +521,11 @@ int xmmake(struct MSGSTRUCT*ms)
  * Return value does not reflect SYSLOG effects or errors.
  * The VM/CMS counterpart is the APPLMSG macro (high level assembler).
  */
-int xmprint(int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct MSGSTRUCT*ms)
+int xmprint(int msgnum,int msgc,char*msgv[],int msgopts,struct MSGSTRUCT*ms)
   {
     int  rc;
     struct MSGSTRUCT ts;
-    unsigned char buffer[256];
+    char buffer[256];
 
     /* NULL message struct means use the static common struct */
     if (ms == NULL) ms = msglobal;
@@ -474,10 +544,8 @@ int xmprint(int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct MSGSTRUC
     rc = xmmake(ms);                              /* make the message */
     if (rc != 0) return xm_negative(rc);    /* if error then negative */
 
-#ifdef XMM_POSIX
     /* optionally route to SYSLOG */
     if (ms->msgopts & MSGFLAG_SYSLOG) syslog(ms->msglevel,"%s",ms->msgbuf);
-#endif
 
     if (ms->msgopts & MSGFLAG_NOPRINT) ; else
     if (ms->msglevel > 5)
@@ -488,7 +556,7 @@ int xmprint(int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct MSGSTRUC
     return rc;
   }
 
-/* --------------------------------------------------------------- WRITE
+/* ------------------------------------------------------------- XMWRITE
  * Write a message to the indicated file descriptor.
  * Newline automatically appended. Optionally SYSLOG the message.
  * Returns: number of bytes written, negative indicates error
@@ -496,11 +564,11 @@ int xmprint(int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct MSGSTRUC
  * The return value does not reflect SYSLOG effects or errors.
  * The VM/CMS counterpart is the APPLMSG macro (high level assembler).
  */
-int xmwrite(int fd,int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct MSGSTRUCT*ms)
+int xmwrite(int fd,int msgnum,int msgc,char*msgv[],int msgopts,struct MSGSTRUCT*ms)
   {
     int  rc;
     struct MSGSTRUCT ts;
-    unsigned char buffer[256];
+    char buffer[256];
 
     /* NULL message struct means use the static common struct */
     if (ms == NULL) ms = msglobal;
@@ -519,10 +587,8 @@ int xmwrite(int fd,int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct M
     rc = xmmake(ms);                              /* make the message */
     if (rc != 0) return xm_negative(rc);    /* if error then negative */
 
-#ifdef XMM_POSIX
     /* optionally route to SYSLOG */
     if (ms->msgopts & MSGFLAG_SYSLOG) syslog(ms->msglevel,"%s",ms->msgbuf);
-#endif
 
     ms->msgbuf[ms->msglen++] = '\n';
     rc = write(fd,ms->msgbuf,ms->msglen);
@@ -530,14 +596,14 @@ int xmwrite(int fd,int msgnum,int msgc,unsigned char*msgv[],int msgopts,struct M
     return rc;
   }
 
-/* -------------------------------------------------------------- STRING
+/* ------------------------------------------------------------ XMSTRING
  * Build the message and put it into a string buffer. No newline.
  * Returns: number of bytes in string, negative indicates error
  * Calls: xmmake()
  * The VM/CMS counterpart (for Rexx variables) is the XMITMSG command.
  */
-int xmstring(unsigned char*output,int outlen,int msgnum,
-                      int msgc,unsigned char*msgv[],struct MSGSTRUCT*ms)
+int xmstring(char*output,int outlen,int msgnum,
+                      int msgc,char*msgv[],struct MSGSTRUCT*ms)
   {
     int  rc;
     struct MSGSTRUCT ts;
@@ -561,7 +627,7 @@ int xmstring(unsigned char*output,int outlen,int msgnum,
     return ms->msglen;   /* normal return is length of message string */
   }
 
-/* --------------------------------------------------------------- CLOSE
+/* ------------------------------------------------------------- XMCLOSE
  * Close (figuratively): free common storage and reset static variables.
  * Returns: zero upon successful operation
  */
@@ -574,9 +640,7 @@ int xmclose(struct MSGSTRUCT*ms)
     /* release any allocated storage for this MSGSTRUCT */
     if (ms->msgdata != NULL) { (void) free(ms->msgdata); ms->msgdata = NULL; }
     if (ms->msgtable != NULL) { (void) free(ms->msgtable); ms->msgtable = NULL; }
-#ifdef XMM_POSIX
     if (ms->msgopts & MSGFLAG_SYSLOG) closelog();
-#endif
     ms->msgopts = 0;
 
     /* clear character fields */
@@ -598,38 +662,68 @@ int xmclose(struct MSGSTRUCT*ms)
     return 0;
   }
 
-/* ------------------------------------------------------------- LEV2PRI
+/* ---------------------------------------------------------- XM_LEV2PRI
  *  Return an integer priority for a given severity level letter.
  *  This routine is not presently used because xmmake() handles it.
  */
-int xm_lev2pri(unsigned char*l)
+int xm_lev2pri(char*l)
   {
     switch (*l) {
       case 'I': case 'i':       /* MSGLEVEL_INFO */
-        return LOG_INFO;        /* 6 */
+        return LOG_INFO;        /* 6 */                           break;
       case 'R': case 'r': case 'N': case 'n':
-        return LOG_NOTICE;      /* 5 */
+        return LOG_NOTICE;      /* 5 */                           break;
       case 'W': case 'w':       /* MSGLEVEL_WARNING */
-        return LOG_WARNING;     /* 4 */
+        return LOG_WARNING;     /* 4 */                           break;
       case 'E': case 'e':       /* MSGLEVEL_ERROR */
-        return LOG_ERR;         /* 3 */
+        return LOG_ERR;         /* 3 */                           break;
       case 'S': case 's': case 'C': case 'c':
-        return LOG_CRIT;        /* 2 */
+        return LOG_CRIT;        /* 2 */                           break;
       case 'T': case 't':       /* MSGLEVEL_TERMINAL */
-        return LOG_ALERT;       /* 1 */
+        return LOG_ALERT;       /* 1 */                           break;
       default:
-        return 0;
+        return 0;                                                 break;
                 }
     return 0;
   }
 
-/* ------------------------------------------------------------ NEGATIVE
+/* --------------------------------------------------------- XM_NEGATIVE
  *  Force the supplied integer to be negative. Good for error indications.
  *  Yeah, yeah, ... it's cheezy. But it works.
  */
 int xm_negative(int n)
   { if (n < 0) return n;
           else return 0 - n;
+  }
+
+/* ---------------------------------------------------------- XM_DELIVER
+ *    Deliver a message in a buffer to stdout, stderr, or SYSLOG.
+ *    Buffer is passed as a pointer to a NULL-terminated string.
+ *    Main reason this even exists is to hide SYSLOG variances.
+ */
+int xm_deliver(char*buff,int type)
+  {
+    switch (type) {
+      case 'I': case 'i':       /* MSGLEVEL_INFO */
+        syslog(LOG_INFO,"%s",buff);                               break;
+      case 'R': case 'r': case 'N': case 'n':
+        syslog(LOG_NOTICE,"%s",buff);                             break;
+      case 'W': case 'w':       /* MSGLEVEL_WARNING */
+        syslog(LOG_WARNING,"%s",buff);                            break;
+      case 'E': case 'e':       /* MSGLEVEL_ERROR */
+        syslog(LOG_ERR,"%s",buff);                                break;
+      case 'S': case 's': case 'C': case 'c':
+        syslog(LOG_CRIT,"%s",buff);                               break;
+      case 'T': case 't':       /* MSGLEVEL_TERMINAL */
+        syslog(LOG_ALERT,"%s",buff);                              break;
+      case '*':
+        return fprintf(stdout,"%s\n",buff);                       break;
+      case '!':
+        return fprintf(stderr,"%s\n",buff);                       break;
+      default:
+        return 0;                                                 break;
+                  }
+    return 0;
   }
 
 

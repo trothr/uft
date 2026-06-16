@@ -5,6 +5,7 @@
  *      Author: Rick Troth, Houston, Texas, USA
  *        Date: 1995-Jan-25
  *              2025-02-11
+ *    Revision: 2.0.16
  *
  *        Note: UFTXDSPL is not a user-level pipeline stage.
  *              The usual output is to the UFTCMAIN stage.
@@ -24,10 +25,7 @@ Parse Arg sid . '(' . ')' .
 /* does the file exist? */
 Parse Value DiagRC(08,'QUERY READER *' sid) With ,
     1 rc 10 . 17 rs '15'x rdr '15'x .
-If rc ^= 0 Then Do
-    Say rs
-    Exit rc
-End /* If .. Do */
+If rc ^= 0 Then Do ; Say rs ; Exit rc ; End
 
 /* now parse the response from CP */
 Parse Var rdr 1 from 9 . 15 class 16 . 17 devtype 20 . ,
@@ -38,35 +36,25 @@ from = Translate(Strip(from),lc,uc)
 /* also get the "table" data */
 Parse Value DiagRC(08,'QUERY READER *' sid 'TBL') With ,
     1 rc 10 . 17 rs '15'x tbl '15'x .
-If rc ^= 0 Then Do
-    Say rs
-    Exit rc
-End /* If .. Do */
+If rc ^= 0 Then Do ; Say rs ; Exit rc ; End
 
 /* and parse that */
 Parse Var tbl 1 . ,
         30 flash 35 . 36 fcb 39 . 40 mdfy 45 . ,
         46 flshc 51 . 52 load 56 . 57 chars . 77 size 81 .
-If Datatype(size,'W') Then size = (size * 4) || "K"
+If Datatype(size,'N') Then size = size * 4096
+                      Else size = kilomega(size) * 4096
 
 /* and finally, get and parse the long form query */
-Parse Value DiagRC(08,'QUERY READER *' sid 'ALL') With ,
+Parse Value DiagRC(08,'QUERY READER *' sid 'ALL ISODATE') With ,
     1 rc 10 . 17 rs '15'x info '15'x .
-If rc ^= 0 Then Do
-    Say rs
-    Exit rc
-End /* If .. Do */
+If rc ^= 0 Then Do ; Say rs ; Exit rc ; End
 
-Parse Value Diag(08,'QUERY DATEFORMAT') With . . . df . '15'x .
-If df = "ISODATE" Then Parse Var info 1 . ,
-        39 date 49 . 50 time 58 . 59 fn 67 . ,
-            69 ft 77 . 78 dist 86 .
-                  Else Parse Var info 1 . ,
-        39 date 44 . 45 time 53 . 54 fn 62 . ,
-            64 ft 72 . 73 dist 81 .
+Parse Var info 1 . 39 date 49 . 50 time 58 . ,
+                   59 fn 67 . 69 ft 77 . 78 dist 86 .
 fn = Strip(fn) ; ft = Strip(ft)
 If fn ^= "" | ft ^= "" Then fn = fn || "." || ft
-                           Else name = ""
+                       Else name = ""
 fn = Translate(fn,lc,uc)
 
 /* spin-up a temporary virtual reader */
@@ -74,23 +62,17 @@ Address CMS 'GETFMADR'
 If rc ^= 0 Then Exit rc
 Parse Pull . . va .
 Parse Value DiagRC(08,'DEFINE READER' va) With 1 rc 10 . 17 rs '15'x .
-If rc ^= 0 Then Do
-    Say rs
-    Exit rc
-End /* If .. Do */
-Call Diag 08, 'SPOOL' va 'KEEP CLASS *'
+If rc ^= 0 Then Do ; Say rs ; Exit rc ; End
+
+Call Diag 08, 'SPOOL' va 'KEEP CLASS *'   /* temporary reader defined */
 
 /* order this file to top-of-queue */
 Parse Value DiagRC(08,'ORDER * READER' sid) With 1 rc 10 . 17 rs '15'x .
-If rc ^= 0 Then Do
-    Say rs
-    Call Diag 08, 'DETACH' va
-    Exit rc
-End /* If .. Do */
+If rc ^= 0 Then Do ; Say rs ; Call Diag 08, 'DETACH' va ; Exit rc ; End
 
 /* attach reader stage to input */
 'ADDPIPE READER' va 'FILE' sid '| *.INPUT:'
-If rc ^= 0 Then Do; Call Diag 08, 'DETACH' va; Exit rc; End
+If rc ^= 0 Then Do ; Call Diag 08, 'DETACH' va ; Exit rc ; End
 
 /* examine the TAG record (should be a NOP CCW) */
 'READTO TAG'
@@ -128,16 +110,15 @@ If form  ^= "" Then 'OUTPUT' "META FORM" form
 If dest  ^= "" Then 'OUTPUT' "META DEST" dest
 If dist  ^= "" Then 'OUTPUT' "META DIST" dist
 If keep  ^= "" Then 'OUTPUT' "META KEEP" keep
-If msg   ^= "" Then 'OUTPUT' "META MSG" msg
+/* msg   ^= "" Then 'OUTPUT' "META MSG" msg                           */
 
 /*  pass the file contents  */
 'OUTPUT' "DATA"       /* this is a special case of the "data" command */
 'CALLPIPE *: | *:'
 
 'SEVER INPUT'
-Call Diag 08, 'CLOSE' va
+Call Diag 08, 'CLOSE' va 'HOLD'
 Call Diag 08, 'DETACH' va
-Call Diag 08, 'PURGE * READER' sid
 
 Exit
 
@@ -186,7 +167,7 @@ If type = "V" & cc = "M" Then Return
 
 /* else, remove CCWs from stream, and possibly pad the records */
 'ADDPIPE *.INPUT: | NLOCATE 1.1' '000300'x '| SPEC 2-* 1 | *.INPUT:'
-If rc ^= 0 Then Do;  Call Diag 08, 'DETACH' va;  Exit rc;  End
+If rc ^= 0 Then Do ; Call Diag 08, 'DETACH' va ; Exit rc ; End
 If devtype = "PUN" Then 'ADDPIPE *.INPUT: | PAD 80 | *.INPUT:'
 
 Return
@@ -199,7 +180,7 @@ NDATAUFT:
 type = "N"
 /* remove CCWs from stream, and possibly pad the records */
 'ADDPIPE *.INPUT: | NLOCATE 1.1' '000300'x '| SPEC 2-* 1 | *.INPUT:'
-If rc ^= 0 Then Do;  Call Diag 08, 'DETACH' va;  Exit rc;  End
+If rc ^= 0 Then Do ; Call Diag 08, 'DETACH' va ; Exit rc ; End
 If devtype = "PUN" Then 'ADDPIPE *.INPUT: | PAD 80 | *.INPUT:'
 
 Return
@@ -221,7 +202,7 @@ XMAILUFT:
 type = "M"
 /* remove CCWs from stream, and check for RFC 822 header */
 'ADDPIPE *.INPUT: | NLOCATE 1.1' '000300'x '| SPEC 2-* 1 | *.INPUT:'
-If rc ^= 0 Then Do;  Call Diag 08, 'DETACH' va;  Exit rc;  End
+If rc ^= 0 Then Do ; Call Diag 08, 'DETACH' va ; Exit rc ; End
 'PEEKTO RECORD'
 
 Return
@@ -282,5 +263,26 @@ yy  DIST
 'CP TAG DEV PUN' tagnode taguser tagprio tagopts
 
  */
+
+/* ------------------------------------------------------------ KILOMEGA
+ *    Convert denominated numeric values to base numeric values.
+ *    In English: if it ends in "K", multiply by 1024, "M" by 1048576.
+ *    Converts nnnP or nnnK or nnnM into their base equivalents.
+ */
+kilomega: Procedure
+Parse Upper Arg n . , .
+If Datatype(n,"N") Then Return n
+
+d = Right(n,1) ; n = Left(n,Length(n)-1)
+Select /* denominator */
+    When d = "K" Then n = n * 1024                            /* kilo */
+    When d = "P" Then n = n * 4096                            /* page */
+    When d = "M" Then n = n * 1024 * 1024                     /* mega */
+    When d = "G" Then n = n * 1024 * 1024 * 1024              /* giga */
+    When d = "T" Then n = n * 1024 * 1024 * 1024 * 1024       /* tera */
+    Otherwise         n = 0
+End /* Select denominator */
+
+Return n
 
 

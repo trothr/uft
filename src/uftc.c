@@ -18,13 +18,6 @@
 #include <unistd.h>
 #include <errno.h>
 
-#if defined(_WIN32) || defined(_WIN64)
- typedef int uid_t;
- typedef int gid_t;
-#else
- #define UFT_POSIX
-#endif
-
 #include "uft.h"
 
 extern int uftcflag;
@@ -32,15 +25,16 @@ extern int uftcflag;
 /* ------------------------------------------------------------------ */
 int main(int argc,char*argv[])
   { static char _eyecatcher[] = "uftc.c main()";
-    int         i, fd0, size, copy, fda, rc, fd[2], flag;
+    int         i, fd0, size, copy, fda, rc, fd[2], uftxflag, nop, chf;
     char        temp[256], targ[256], b[UFT_BUFSIZ], akey[256], *mv[16],
-               *host, *name, *type, *auth, *class, *proxy, *ptitle;
+               *host, *name, *type, *auth, *class, *proxy, *ptitle,
+               *flga, *flgb;
     struct  stat  uftcstat;
     time_t      mtime;
     mode_t      prot;
     struct tm *gmtstamp;
-char   *arg0;
-int     uftv;           /* protocol level (1 or 2) */
+    char   *arg0;
+    int     uftv;           /* protocol level (1 or 2) */
 
     ptitle = "Internet SENDFILE client";             /* program title */
 
@@ -51,7 +45,9 @@ int     uftv;           /* protocol level (1 or 2) */
     auth = "-";                /* no particular authentication scheme */
     copy = 0;
     proxy = "";
-    flag = 0x0000;                             /* reset all flag bits */
+    uftxflag = 0x0000;                         /* reset all flag bits */
+    flga = flgb = "";
+    nop = chf = 0;           /* winnowing and chaffing off by default */
 
     /* process command-line options */
     for (i = 1; i < argc && argv[i][0] == '-' &&
@@ -63,14 +59,16 @@ int     uftv;           /* protocol level (1 or 2) */
                         break;
             case 'a':   case 'A':       /* ASCII (ie: plain text)     */
                         uftcflag &= ~UFT_BINARY;
-                        flag |= UFT_NOTRANS;
                         type = "A";
+                        uftxflag |= UFT_DOTRANS;
+                        flga = argv[i];
                         break;
             case 'b':   case 'B':       /* BINARY                     */
             case 'i':   case 'I':       /* aka IMAGE                  */
                         uftcflag |= UFT_BINARY;
-                        flag |= UFT_DOTRANS;
                         type = "I";
+                        uftxflag |= UFT_NOTRANS;
+                        flgb = argv[i];
                         break;
 #ifdef  OECS
             case 'e':   case 'E':       /* EBCDIC (IBM plain text)    */
@@ -79,24 +77,20 @@ int     uftv;           /* protocol level (1 or 2) */
                         break;
 #endif
             case 't':   case 'T':       /* sender-specified TYPE      */
-                        i++;   
-                        type = argv[i];
+                        i++; type = argv[i];
                         break;
             case 'n':   case 'N':       /* NAME of the file           */
-                        i++;
-                        name = argv[i];
+                        i++; name = argv[i];
                         break;
             case 'c':   case 'C':       /* CLASS                      */
-                        i++;   
-                        class = argv[i];
+                        i++; class = argv[i];
                         break;
             case 'm':   case 'M':       /* TYPE=M for email           */
                         uftcflag &= ~UFT_BINARY;
                         type = "M";
                         break;
             case '#':   /* COPY -or- COPIES                           */
-                        i++;    
-                        copy = atoi(argv[i]);
+                        i++; copy = atoi(argv[i]);
                         break;
 
 /* ------------------------------------------------------------------ */
@@ -109,10 +103,12 @@ int     uftv;           /* protocol level (1 or 2) */
                   { uftcflag |= UFT_VERBOSE; } else
                 if (uftx_abbrev("--ascii",argv[i],5) > 0 ||
                     uftx_abbrev("--text",argv[i],6) > 0)
-                  { uftcflag &= ~UFT_BINARY; type = "A"; } else
+                  { uftcflag &= ~UFT_BINARY; type = "A";
+                    uftxflag |= UFT_DOTRANS; flga = argv[i]; } else
                 if (uftx_abbrev("--binary",argv[i],5) > 0 ||
                     uftx_abbrev("--image",argv[i],4) > 0)
-                  { uftcflag |= UFT_BINARY; type = "I"; } else
+                  { uftcflag |= UFT_BINARY; type = "I";
+                    uftxflag |= UFT_NOTRANS; flgb = argv[i]; } else
 #ifdef  OECS
                 if (uftx_abbrev("--ebcdic",argv[i],8) > 0)
                   { uftcflag |= UFT_BINARY; type = "E"; } else
@@ -125,6 +121,13 @@ int     uftv;           /* protocol level (1 or 2) */
                   { i++; name = argv[i]; } else
                 if (uftx_abbrev("--verbose",argv[i],6) > 0)
                   { uftcflag |= UFT_VERBOSE; } else
+
+                if (uftx_abbrev("--chaff",argv[i],7) > 0)
+                  { i++; chf = atoi(argv[i]); } else
+                if (uftx_abbrev("--noops",argv[i],6) > 0 ||
+                    uftx_abbrev("--nops",argv[i],5) > 0)
+                  { i++; nop = atoi(argv[i]); } else
+
                 if (uftx_abbrev("--class",argv[i],4) > 0)
                   { i++; class = argv[i]; } else
 /*                          --dest
@@ -174,17 +177,21 @@ int     uftv;           /* protocol level (1 or 2) */
     temp[0] = 0x00;
 
     /* ensure the user indicated ASCII or IMAGE but not both          */
-    if ((flag & UFT_DOTRANS) && (flag & UFT_NOTRANS))
-      { mv[1] = "--text"; mv[2] = "--binary";
+    if ((uftxflag & UFT_DOTRANS) && (uftxflag & UFT_NOTRANS))
+      { mv[1] = flga;     mv[2] = flgb;
         rc = uftx_message(temp,sizeof(temp)-1,66,"CLI",3,mv);
         if (rc >= 0) fprintf(stderr,"%s\n",temp); else
         fprintf(stderr,"%s: conflicting options\n",arg0);
         return 1; }
-    if (!(flag & (UFT_DOTRANS|UFT_NOTRANS)))
+
+    /* alternatively: auto-detect translation based on file content   */
+#ifndef UFT_AUTOTYPE
+    if (!(uftxflag & (UFT_DOTRANS|UFT_NOTRANS)))
       { rc = uftx_message(temp,sizeof(temp)-1,16,"CLI",1,mv);
         if (rc >= 0) fprintf(stderr,"%s\n",temp); else
         fprintf(stderr,"%s: missing options\n",arg0);
         return 1; }
+#endif
 
     /* flag some known canonization types */
     switch (type[0])
@@ -209,8 +216,10 @@ int     uftv;           /* protocol level (1 or 2) */
 
     /* verify that the open() worked */
     if (fd0 < 0)
-      { if (*name != 0x00) (void) perror(name);
-                   else    (void) perror("stdin");
+      { if (*name != 0x00) { if (errno != 0) perror(name); }
+                   else    { if (errno != 0) perror("stdin"); }
+        mv[1] = name;
+        uftx_msgprtl(23,"CLI",2,mv);   /* 23 E unable to open file &1 */
         return 1; }                       /* open file to send failed */
 
     /* do we have any ideas about this file? */
@@ -245,22 +254,41 @@ int     uftv;           /* protocol level (1 or 2) */
     if (*host == '@') *host++ = 0x00; else host = "localhost";
 
     rc = uftc_open(host,proxy,fd);
-    if (rc != 0) { if (errno != 0) perror(host); return 1; }
-/*  r = fd[0]; s = fd[1];                // r for read and s for send */
+    if (rc != 0) { /* if (errno != 0) perror(host); */
+        mv[1] = host;                /* cannot connect to target host */
+        uftx_msgprtl(20,"CLI",2,mv);   /* 20 E target UFT not reached */
+        return 1; }
+/*  r = fd[0]; s = fd[1];        // r (0) for read and s (1) for send */
 
     /* wait for the herald from the server */
     i = tcpgets(fd[0],temp,sizeof(temp));   /* all others uftc_wack() */
     if (i < 0)
-      { (void) perror(host);              /* FIXME: remember to close */
+      { if (errno != 0) perror(host);
+        uftc_close(fd);
+        mv[1] = host;       /* failed reading herald from target host */
+        uftx_msgprtl(21,"CLI",2,mv);    /* 21 E failed reading herald */
         return 1; }              /* read of herald from server failed */
     if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
 
     /* figure out what protocol version the server likes */
-    uftv = temp[0] & 0x0F;
+    uftv = temp[0] & 0x0F;            /* compatible w ASCII or EBCDIC */
     if (uftv < 1) uftv = 1;
+
+    /* look for expected error indicators in the herald               */
+    if (uftv > 2)     /* not actually the UFT level but an error code */
+      { uftc_close(fd);
+        mv[1] = host;        /* error reading herald from target host */
+        uftx_msgprtl(25,"CLI",2,mv);     /* 25 E error reading herald */
+          { char *p; int e;
+            p = temp; while (*p > ' ') p++; *p++ = 0x00;
+            e = atoi(temp);
+            if (e == 1568 || e == 1599) uftx_msgprtl(68,"CLI",0,mv);
+                else {  mv[1] = p; uftx_msgprtl(99,"CLI",2,mv); } }
+        return 1; }                  /* the herald indicated an error */
+
     if (uftcflag & UFT_VERBOSE)
-      { (void) sprintf(temp,"%s: UFT protocol %d",arg0,uftv);
-        (void) uftx_putline(2,temp,0); }
+      { sprintf(temp,"%d",uftv); mv[1] = temp;      /* protocol level */
+        uftx_msgprtl(88,"CLI",2,mv); }  /* 88 I UFT protocol level &1 */
     /* (above is only good for UFT1 or UFT2) */
 
     /* identify this client to the server */
@@ -280,8 +308,7 @@ int     uftv;           /* protocol level (1 or 2) */
         /* ----- step 6 --------------------------------- EOF command */
         /* ----- step 7 -------------------------------- QUIT command */
 
-    /* start the transaction */
-/*  (void) sprintf(temp,"FILE %d %s %s",size,uftx_user(),auth);       */
+    /* start the transaction ----------------------- the FILE command */
     (void) sprintf(temp,"FILE %d %s %s %s",size,uftx_user(),auth,akey);
     if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
     (void) tcpputs(fd[1],temp);
@@ -291,9 +318,11 @@ int     uftv;           /* protocol level (1 or 2) */
         else (void) uftx_putline(2,temp,0);
         return 1; }                      /* FIXME: remember to close */
     if (uftcflag & UFT_VERBOSE || i == 5) (void) uftx_putline(2,temp,0);
-    if (i == 5) { return 5; }           /* a 500 NAK here is terminal */
+    if (i == 5)                         /* a 500 NAK here is terminal */
+      { uftc_close(fd);
+        return 1; }                     /* a 500 NAK here is terminal */
 
-    /* tell the server who it's for */
+    /* tell the server who it's for ---------------- the USER command */
     (void) sprintf(temp,"USER %s",targ);
     if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
     (void) tcpputs(fd[1],temp);
@@ -301,11 +330,14 @@ int     uftv;           /* protocol level (1 or 2) */
     if (i < 0)
       { if (errno != 0) (void) perror(arg0);
         else (void) uftx_putline(2,temp,0);
+        uftc_close(fd);
         return 1; }
     if (uftcflag & UFT_VERBOSE || i == 5) (void) uftx_putline(2,temp,0);
-    if (i == 5) { return 5; }           /* a 500 NAK here is terminal */
+    if (i == 5)                         /* a 500 NAK here is terminal */
+      { uftc_close(fd);
+        return 1; }                     /* a 500 NAK here is terminal */
 
-    /* signal the type for canonization */
+    /* signal the type for canonization ------------ the TYPE command */
     if (type == 0x0000 || type[0] == 0x00)
       { if (uftcflag & UFT_BINARY) type = "I";
                 /* "applcation/octet-stream" */
@@ -317,11 +349,13 @@ int     uftv;           /* protocol level (1 or 2) */
     if (i < 0)
       { if (errno != 0) (void) perror(arg0);
         else (void) uftx_putline(2,temp,0);
+        uftc_close(fd);
         return 1; }
     if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
-    if (i == 5) { return 5; }           /* a 500 NAK here is terminal */
+    if (i == 5)                         /* a 500 NAK here is terminal */
+      { uftc_close(fd); return 1; }     /* a 500 NAK here is terminal */
 
-    /* does this file have a name? */
+    /* does this file have a name? ------------------- a META command */
     if (name != 0x0000 && name[0] != 0x00)
       { name = uftx_basename(name);
         sprintf(temp,"NAME %s",name);
@@ -331,7 +365,7 @@ int     uftv;           /* protocol level (1 or 2) */
         if (i < 0)
           { if (errno != 0) (void) perror(arg0);
             else (void) uftx_putline(2,temp,0);
-            return 1; }
+            uftc_close(fd); return 1; }
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0); }
 
     /* do we have a time stamp for this file? */
@@ -345,14 +379,14 @@ int     uftv;           /* protocol level (1 or 2) */
         sprintf(temp,"DATE %04d-%02d-%02d %02d:%02d:%02d %s",
                 gmtstamp->tm_year, gmtstamp->tm_mon,
                 gmtstamp->tm_mday, gmtstamp->tm_hour,
-                gmtstamp->tm_min, gmtstamp->tm_sec, tzname[0]);
+                gmtstamp->tm_min, gmtstamp->tm_sec, /* tzname[0] */ "GMT");
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
         i = tcpputs(fd[1],temp);
         i = uftc_wack(fd[0],temp,sizeof(temp));
         if (i < 0 && temp[0] != '4')
           { if (errno != 0) (void) perror(arg0);
             else (void) uftx_putline(2,temp,0);
-            return 1; }
+            uftc_close(fd); return 1; }
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
 
         /* also send it as number-of-seconds Unix epoch offset value  */
@@ -363,7 +397,7 @@ int     uftv;           /* protocol level (1 or 2) */
         if (i < 0 && temp[0] != '4')
           { if (errno != 0) (void) perror(arg0);
             else (void) uftx_putline(2,temp,0);
-            return 1; }
+            uftc_close(fd); return 1; }
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0); }
 
     /* do we have a protection bit pattern on this file? */
@@ -375,7 +409,7 @@ int     uftv;           /* protocol level (1 or 2) */
         if (i < 0 && temp[0] != '4')
           { if (errno != 0) (void) perror(arg0);
             else (void) uftx_putline(2,temp,0);
-            return 1; }
+            uftc_close(fd); return 1; }
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0);
 
         /* also send it as bits in octal format                       */
@@ -386,7 +420,7 @@ int     uftv;           /* protocol level (1 or 2) */
         if (i < 0 && temp[0] != '4')
           { if (errno != 0) (void) perror(arg0);
             else (void) uftx_putline(2,temp,0);
-            return 1; }
+            uftc_close(fd); return 1; }
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0); }
 
     /* does this file have a specific class? */
@@ -399,7 +433,7 @@ int     uftv;           /* protocol level (1 or 2) */
         if (i < 0)
           { if (errno != 0) (void) perror(arg0);
             else (void) uftx_putline(2,temp,0);
-            return 1; }
+            uftc_close(fd); return 1; }
         if (uftcflag & UFT_VERBOSE) (void) uftx_putline(2,temp,0); }
 
     /* process the data - everything goes down the pipe as it is      */

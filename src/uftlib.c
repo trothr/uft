@@ -10,18 +10,26 @@
  *
  *        Note: This is for UFT but includes MSG functions also.
  *
-
-needed:
-int uftc_open(char*,char*,int*);
-uftc_write()
-uftc_read()
-int uftc_close(int*);
-
  */
 
-#ifndef PREFIX
- #define PREFIX "/usr"
+#if defined(_WIN32) || defined(_WIN64)
+/* define WIN32_LEAN_AND_MEAN */
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+ #include <windows.h>
+ #include <io.h>
+#else
+ #include <sys/socket.h>
+ #include <sys/un.h>
+ #include <arpa/inet.h>
+ #include <netinet/in.h>
+ #include <netdb.h>
+ #include <pwd.h>
+ #include <errno.h>
 #endif
+
+#define __USE_XOPEN
+#include <time.h>
 
 #include <stddef.h>
 #include <string.h>
@@ -33,21 +41,8 @@ int uftc_close(int*);
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#if defined(_WIN32) || defined(_WIN64)
- #include <winsock2.h>
-#else
- #include <sys/socket.h>
- #include <sys/un.h>
- #include <arpa/inet.h>
- #include <pwd.h>
- #include <errno.h>
-#endif
-
 #include <ctype.h>
 #include "aecs.h"
-
-#define __USE_XOPEN
-#include <time.h>
 
 /* OpenVM is a POSIX environment for VM/CMS so set the OECS symbol    */
 #ifdef          __OPEN_VM
@@ -56,8 +51,8 @@ int uftc_close(int*);
  #endif
 #endif
 
-#ifdef UFT_DO_SYSLOG
- #include <syslog.h>
+#ifndef PREFIX
+ #define PREFIX "/usr"
 #endif
 
 /* The following three lines are related to the XMITMSGX package      *
@@ -77,7 +72,7 @@ int uftlogfd = -1;
 static char *gsbp = NULL;             /* global string buffer pointer */
 static int gsbl = 0;                     /* global string buffer size */
 
-/* ---------------------------------------------------------------------
+/* -------------------------------------------------------- UFTX_MESSAGE
  *    This routine handles message FORMATTING (not message delivery).
  *    It's a different way of doing gettext() type processing
  *    which is compatible with the 'XMITMSG' command and APPLMSG macro
@@ -93,7 +88,8 @@ int uftx_message(char*mo,int ml,                    /* buffer, buflen */
 
     /* Open the messages file, read it, get ready for service.        */
     rc = xmopen("uft",0,&uftmsgs);        /* FIXME: check indirection */
-    if (rc != 0) return rc;
+/*  rc = xmopenl("uft",0,&uftmsgs,MSGROUTE_FILE);         // LOG_UUCP */
+    if (rc != 0) { if (errno != 0) perror("xmopen()"); return rc; }
 
     if (mn < 0) mn = 0 - mn;   /* force message number to be positive */
 
@@ -101,23 +97,58 @@ int uftx_message(char*mo,int ml,                    /* buffer, buflen */
     uftmsgs.msglevel = 0;
 
     /* using pfxmaj and pfxmin is definitely outside the XMITMSGX API */
-    strncpy(uftmsgs.pfxmaj,"UFT",4);
+    strncpy(uftmsgs.pfxmaj,UFT_TAG,4);
     strncpy(uftmsgs.pfxmin,mq,4);
     /* also remember to up-case the latter */
     uftmsgs.pfxmin[3] = 0x00;
     for (p = uftmsgs.pfxmin; *p != 0x00; p++) if (islower(*p)) *p = toupper(*p);
 
     /* Generate a message and store it as a string.                   */
-    rc = xmstring(mo,ml,mn,mc,(unsigned char**)mv,&uftmsgs);
+    rc = xmstring(mo,ml,mn,mc,mv,&uftmsgs);
+
+    return rc;
+  }
+
+/* -------------------------------------------------------- UFTX_MSGPRTL
+ *    Print and log an enumerated message.
+ *    See also: uftx_message()
+ */
+int uftx_msgprtl(int mn,                            /* message number */
+                 char*mq,                                   /* caller */
+                 int mc,char*mv[])                      /* msgc, msgv */
+  { static char _eyecatcher[] = "uftx_msgprtl()";
+    int rc;
+    char *p;
+
+    /* Open the messages file, read it, get ready for service.        */
+    rc = xmopen("uft",0,&uftmsgs);        /* FIXME: check indirection */
+/*  rc = xmopenl("uft",0,&uftmsgs,MSGROUTE_FILE);         // LOG_UUCP */
+    if (rc != 0) { if (errno != 0) perror("xmopen()"); return rc; }
+
+    if (mn < 0) mn = 0 - mn;   /* force message number to be positive */
+
+    /* do we need this? */
+    uftmsgs.msglevel = 0;
+
+    /* using pfxmaj and pfxmin is definitely outside the XMITMSGX API */
+    strncpy(uftmsgs.pfxmaj,UFT_TAG,4);
+    strncpy(uftmsgs.pfxmin,mq,4);
+    /* also remember to up-case the latter */
+    uftmsgs.pfxmin[3] = 0x00;
+    for (p = uftmsgs.pfxmin; *p != 0x00; p++) if (islower(*p)) *p = toupper(*p);
+
+    /* Generate the message, print it, and SYSLOG it.                 */
+    rc = xmprint(mn,mc,mv,MSGFLAG_SYSLOG,&uftmsgs);
 
     return rc;
   }
 
 /* -------------------------------------------------------- User Message
- *    This routine attempts to deliver a message to a logged-on user.
- *  This is somewhat crude: we toss the work of finding the user
- *  and delivering the message to the 'write' command. But be careful:
- *  on MS Windows there is a completely different 'write' command.
+ *    This routine handles message DELIVERY (not message formatting).
+ *    It attempts to deliver a message to a logged-on user.
+ *    This is somewhat crude: we toss the work of finding the user
+ *    and delivering the message to the 'write' command. But be careful:
+ *    on MS Windows there is a completely different 'write' command.
  */
 int uftd_message(char*user,char*text)
   { static char _eyecatcher[] = "uftd_message()";
@@ -300,7 +331,7 @@ int msgd_umsg(char*user,char*text,char*from)
     return rc;
   }
 
-/* -------------------------------------------------- File Announce FANN
+/* --------------------------------------------- File Announce UFTD_FANN
  *    This routine announces the arrival of a file.
  *       Calls: msgd_xmsg_sock(), msgd_xmsg_fifo(), uftd_message()
  */
@@ -322,7 +353,7 @@ int uftd_fann(char*user,char*spid,char*from)
     mv[0] = "";
     mv[1] = spid; mv[2] = user; mv[3] = from;         /* three tokens */
     rc = uftx_message(q,l,94,"SRV",4,mv);         /* previously #1004 */
-    /*   94    I File &1 spooled to &2 origin &3                      */
+    /*   94    I file &1 spooled to &2 origin &3                      */
     if (rc < 0) return rc;
 
     while (*q != 0x00 && i < l) { q++; i++; }
@@ -372,15 +403,14 @@ int uftd_fann(char*user,char*spid,char*from)
     rc = uftd_message(un,buffer);
 
     /* -------- merge uftdlmsg logic here --------------------------- */
-#ifdef UFT_DO_SYSLOG
-    openlog("uftd",LOG_PID|LOG_CONS,LOG_UUCP);
-    syslog(LOG_INFO,"%s",buffer);
-#endif
+/*  openlog("uftd",LOG_PID|LOG_CONS,LOG_UUCP);                     // */
+/*  syslog(LOG_INFO,"%s",buffer);                                  // */
+    xm_deliver(buffer,MSGLEVEL_INFO);      /* SYSLOG under the covers */
 
     return rc;
   }
 
-/* -------------------------------------------------- File Announce TANN
+/* --------------------------------------------- File Announce UFTD_TANN
  *    This routine announces the transfer of a file.
  *       Calls: msgd_xmsg_sock(), msgd_xmsg_fifo(), uftd_message()
  */
@@ -452,10 +482,9 @@ int uftd_tann(char*user,char*spid,char*from)
     rc = uftd_message(un,buffer);
 
     /* -------- merge uftdlmsg logic here --------------------------- */
-#ifdef UFT_DO_SYSLOG
-    openlog("uftd",LOG_PID|LOG_CONS,LOG_UUCP);
-    syslog(LOG_INFO,"%s",buffer);
-#endif
+/*  openlog("uftd",LOG_PID|LOG_CONS,LOG_UUCP);                     // */
+/*  syslog(LOG_INFO,"%s",buffer);                                  // */
+    xm_deliver(buffer,MSGLEVEL_INFO);      /* SYSLOG under the covers */
 
     return rc;
   }
@@ -471,7 +500,7 @@ int uftd_tann(char*user,char*spid,char*from)
  *
  */
 
-/* -------------------------------------------------------------- USERID
+/* -- USERID ------------------------------------------------- UFTX_USER
  *    return login name from the best of several standard sources
  *
  *        Note: Size is limited to 63 characters because we force it
@@ -486,7 +515,6 @@ char *uftx_user()
     static char ut[64];
 
 #ifdef UFT_POSIX
-
     struct passwd *pwdent;
 
     /* first try effective uid key into passwd */
@@ -498,16 +526,19 @@ char *uftx_user()
     if (*u == 0x00) {
     pwdent = getpwuid(getuid());
     if (pwdent) u = pwdent->pw_name; if (u == 0x0000) u = ""; }
-
 #endif
 
     /* skating on thin ice: try USER environment variable */
     if (*u == 0x00) {
     u = getenv("USER"); if (u == 0x0000) u = ""; }
 
-    /* last resort: try LOGNAME environment variable */
+    /* alternate: try LOGNAME environment variable */
     if (*u == 0x00) {
     u = getenv("LOGNAME"); if (u == 0x0000) u = ""; }
+
+    /* last resort: try USERNAME environment variable */
+    if (*u == 0x00) {
+    u = getenv("USERNAME"); if (u == 0x0000) u = ""; }
 
     /* force the username to lower case (ths is POSIX!) */
     i = 0;
@@ -618,15 +649,13 @@ int msglocal(char*user,char*text)
 
     /*  if there's no listener ...  */
     if (fd < 0 && errno == ENXIO)
-      {
-        /*  launch our special application to listen  */
+      { /* try to launch our special application to listen */
 #ifdef UFT_POSIX
         fd = open(temp,O_WRONLY|O_NDELAY);
 #else
         fd = open(temp,O_WRONLY);
 #endif
-        /*  ... or NOT ...  */
-      }
+        /* ... or NOT ... */ }
     /* if (fd < 0) */ return fd;
   }
 
@@ -635,10 +664,11 @@ int msglocal(char*user,char*text)
  */
 char*uftx_home(char*user)
   { static char _eyecatcher[] = "uftx_home()";
-#ifdef UFT_POSIX
-    int         i, uuid;
-    struct passwd *pwdent;
     static char homedir[256];
+    int i;
+#ifdef UFT_POSIX
+    int uuid;
+    struct passwd *pwdent;
 
     errno = 0;
     pwdent = getpwnam(user);
@@ -647,11 +677,17 @@ char*uftx_home(char*user)
 
     return homedir;
 #else
-    return "";
+    char *p, *q;
+    p = getenv("HOME");
+    q = homedir;
+    for (i = 0; *p != 0x00 && i < sizeof(homedir); i++)
+      { q = p; if (*q == '\\') *q = '/'; }
+    *q = 0x00;
+    return homedir;
 #endif
   }
 
-/* ------------------------------------------------------------- GETLINE
+/* -------------------------------------------------------- UFTX_GETLINE
  *        Name: GETLINE/UFTXGETS/UFTXRCVS
  *              common Get/Receive String function
  *   Operation: Reads a CR/LF terminated string from stream s
@@ -717,7 +753,7 @@ int uftx_getline(int s,char*b,int l)
     return i;
   }
 
-/* ------------------------------------------------------------- PUTLINE
+/* -------------------------------------------------------- UFTX_PUTLINE
  *        Name: PUTLINE/UFTXPUTS
  *              common Put String function
  *   Operation: Writes the NULL terminated string from buffer b
@@ -923,14 +959,39 @@ int uftc_wack(int s,char*b,int l)
 
 /* ----------------------------------------------------------- UFTC_OPEN
  *    open a connection to the UFT server - direct TCP or via proxy
- */
+ *    Note: 2.0.17 revision eliminates use of tcpopen() from tcpio.c
+ */ 
 int uftc_open(char*peer,char*prox,int*pipe)
   { static char _eyecatcher[] = "uftc_open()";
-    int s;
-    char temp[256];
+    int s, rc, i, j, sok;
+    char temp[256], *host, *port, *tail;
 
-    /* if the supplied peer is bogus then stop right here             */
-    if (peer == NULL && *peer == 0x00) return -1; /* FIXME: set errno */
+    struct sockaddr name;
+    struct hostent *hent, myhent;
+
+    /* special consideration for z/VM CMS particularly in the shell   */
+#ifdef          __OPEN_VM
+struct addrinfo
+{
+  int ai_flags;                 /* Input flags.  */
+  int ai_family;                /* Protocol family for socket.  */
+  int ai_socktype;              /* Socket type.  */
+  int ai_protocol;              /* Protocol for socket.  */
+  socklen_t ai_addrlen;         /* Length of socket address.  */
+  struct sockaddr *ai_addr;     /* Socket address for socket.  */
+  char *ai_canonname;           /* Canonical name for service location.  */
+  void *ai_next;                /* Pointer to next in list.  */
+} *res, *res2;
+#else
+    struct addrinfo *res, *res2;
+#endif
+
+    /* if either supplied peer or pipe is bogus then stop right here  */
+    if (peer == NULL && *peer == 0x00) { errno = EINVAL; return -1; }
+    if (pipe == NULL) { errno = EINVAL; return -1; }
+
+    /* just in case ... prep the pipe pair as "disconnected"          */
+    pipe[0] = pipe[1] = -1;       /* preset file descriptors to error */
 
     /* tack-on the TCP port number                                    */
     snprintf(temp,sizeof(temp)-1,"%s:%d",peer,UFT_PORT);
@@ -938,11 +999,156 @@ int uftc_open(char*peer,char*prox,int*pipe)
     /* if a proxy string was provided then try connecting that way    */
     if (prox != NULL && *prox != 0x00) return uftx_proxy(temp,prox,pipe);
 
-    /* normal connection is direct TCP with built-in DNS resolution   */
-    s = tcpopen(temp,0,0);
-/*  if (s < 0) { perror(peer); return -1; }            ** open failed */
-    if (s < 0) return s;                               /* open failed */
-    pipe[0] = pipe[1] = s;      /* input and output are the same here */
+    /* special consideration for MS Windows with MINGW/MSYS framework */
+#if defined(_WIN32) || defined(_WIN64)
+    WSADATA wsa;
+    rc = WSAStartup(MAKEWORD(2,2),&wsa);
+    if (rc != 0) {
+        fprintf(stderr,"Windows socket subsytsem could not be initialized.\n");
+        fprintf(stderr,"Error Code: %d. Exiting..\n", WSAGetLastError());
+        return -1; }
+/* fprintf(stderr,"yup, we're on Windows\n");               ** TRIAGE */
+#endif
+
+    /* parse host address and port number by colon                    */
+    host = port = temp;
+    if (*peer == '[') { host++; port++;
+        while (*port != ']' && *port != 0x00) port++;
+        if (*port == ']') *port++ = 0x00; }
+                 else
+        while (*port != ':' && *port != 0x00) port++;
+    if (*port == ':') *port++ = 0x00;
+    tail = port; while (*tail != ':' && *tail != 0x00) tail++;
+    if (*tail == ':') *tail = 0x00;
+
+    /* drop the heavy lifting onto getaddrinfo()                      */
+    rc = getaddrinfo(host,port,NULL,&res);
+#ifdef EAI_SYSTEM
+    if (rc == EAI_SYSTEM) perror("uftc_open(): getaddrinfo()");
+#endif
+    if (rc == 0) { /* that is, if getaddrinfo() worked                */
+        /* step through the addrinfo structures from getaddrinfo()    */
+        res2 = res;
+        while (res2 != NULL)
+          { /* saprint(res2->ai_addr,res2->ai_addrlen);               */
+            sok = 0;
+            rc = s = socket(res2->ai_family,SOCK_STREAM,0);
+            if (rc >= 0) { sok = 1;      /* on success try to connect */
+            rc = connect(s,res2->ai_addr,res2->ai_addrlen); }
+            if (rc == 0) break;  /* on success break out of this loop */
+            close(s); s = -1;            /* reset socket for next try */
+            res2 = res2->ai_next; }
+        if (rc < 0) if (errno != 0)
+          { if (sok) perror("uftc_open(): connect()");
+                else perror("uftc_open(): socket()"); }
+        freeaddrinfo(res);
+
+        if (s >= 0)                          /* looks like it worked! */
+          { /* proper Berkeley socket handles both in (0) and out (1) */
+            pipe[0] = pipe[1] = s; return 0; }
+
+                 } /* all of that from a good getaddrinfo() result    */
+
+#ifdef UFTC_OPEN_FALLBACK
+    /* here maybe re-try with older methods */
+
+    /*  figure out where to connect  */
+    hent = gethostbyname(host);
+    if (hent == NULL)
+      { if (errno != 0) perror("uftc_open(): gethostbyname()"); return -1; }
+
+    /* gimme a socket */
+    rc = s = socket(hent->h_addrtype,SOCK_STREAM,0);
+    if (rc < 0)
+      { if (errno != 0) perror("uftc_open(): socket()"); return rc;  }
+
+      { int pn;
+        pn = atoi(port);
+        name.sa_family = hent->h_addrtype;
+        /* begin building that structure */
+        name.sa_data[0] = (pn >> 8) & 0xFF;
+        name.sa_data[1] = pn & 0xFF; }
+
+    /*  try address one-by-one  */
+    for (i = 0; hent->h_addr_list[i] != NULL; i++)
+      { /*  any more addresses?  */
+        if (hent->h_addr_list[i] == NULL) break;
+        if (hent->h_addr_list[i][0] == 0x00) break;
+
+        /*  fill-in this address to the structure  */
+        for (j = 0; j < hent->h_length; j++)
+            name.sa_data[j+2] = hent->h_addr_list[i][j];
+        name.sa_data[j+2] = 0x00;       /*  terminate  */
+
+        /* can we talk? */
+/*      rc = connect(s,&name,hent->h_length);                      // */
+        rc = connect(s,&name,sizeof(name));
+        if (rc == 0) return s; }
+    if (errno != 0) perror("uftc_open(): connect()");
+
+    /* can't seem to reach this host on this port */
+    (void) close(s);
+#endif /* UFTC_OPEN_FALLBACK */
+
+    return -1;
+  }
+
+/* ----------------------------------------------------------- UFTC_PEER
+ *    Rough equivalent to tcpident() from tcpip.c sans IDENT logic.
+ */
+int uftc_peer(int s,char*buff,int blen)
+  { static char _eyecatcher[] = "uftc_peer()";
+    int rc, alen;
+    union insa {
+        struct sockaddr sa;                 /* as generic as possible */
+        struct sockaddr_in sa4;               /* sockaddr for AF_INET */
+#ifdef AF_INET6
+        struct sockaddr_in6 sa6;             /* sockaddr for AF_INET6 */
+#endif
+        unsigned short int family;     /* common address family value */
+               } insa;                           /* internet sockaddr */
+    void*aptr;
+    char *user, host[256];
+
+    aptr = &insa;
+    user = "";
+
+    /* first, tell me about this end  */
+    alen = sizeof(insa);
+    rc = getsockname(s,aptr,&alen);
+    if (rc != 0)
+      { if (errno != 0) perror("getsockname()");
+        if (rc < 0) return rc; else return -1; }
+/*      On success, zero is returned.  On error, -1 is returned,      *
+ *      and errno is set to indicate  the error.                      */
+
+/*      saprint(aptr,alen);                                           */
+
+    /*  what's the host on the other end?  */
+    alen = sizeof(insa);
+    rc = getpeername(s,aptr,&alen);
+    if (rc != 0)
+      { if (errno != 0) perror("getpeername()");
+        if (rc < 0) return rc; else return 0 - rc; }
+/*      On success, zero is returned.  On error, -1 is returned,      *
+ *      and errno is set to indicate  the error.                      */
+
+/*      saprint(aptr,alen);                                           */
+
+    /*  what host is at that address?  */
+#ifndef NI_NAMEREQD
+    rc = getnameinfo(aptr,alen,host,sizeof(host),NULL,0,0);
+#else
+    rc = getnameinfo(aptr,alen,host,sizeof(host),NULL,0,NI_NAMEREQD);
+#endif
+    if (rc != 0)
+      { if (errno != 0) perror("getnameinfo()");
+        if (rc < 0) return rc; else return 0 - rc; }
+/*      On success, 0 is returned, node and service names are filled. *
+ *      On error, one of the nonzero error codes is returned.         */
+
+    snprintf(buff,blen,"%s@%s",user,host);
+
     return 0;
   }
 
@@ -998,7 +1204,7 @@ int uftd_agck(char*k)
     return 5;
   }
 
-/* -------------------------------------------------------------- GETENV
+/* --------------------------------------------------------- UFTX_GETENV
  *    Returns a pointer to the value of the requested variable,
  *    or points to the end of the environment buffer. (double null)
  */
@@ -1033,7 +1239,7 @@ char*uftx_getenv(char*var,char*env)
 /*  p = "MSGTYPE=IMSG";         ** 7 - IMSG      */
 /*  p = "MSGTYPE=FMSG";         ** 8 - SCIF      */
 
-/* ------------------------------------------------------------ BASENAME
+/* ------------------------------------------------------- UFTX_BASENAME
  *    Returns a pointer to the filename at the enf of a path.
  */
 char*uftx_basename(char*s)
@@ -1047,7 +1253,7 @@ char*uftx_basename(char*s)
     return p;
   }
 
-/* -------------------------------------------------------------- PARSE1
+/* --------------------------------------------------------- UFTX_PARSE1
  *    Terminates a string AFTER the first blank-delimited token.
  */
 char*uftx_parse1(char*s)
@@ -1059,7 +1265,7 @@ char*uftx_parse1(char*s)
     return s;
   }
 
-/* --------------------------------------------------------------- PROXY
+/* ---------------------------------------------------------- UFTX_PROXY
  *    Launch a proxy program with its stdin and stdout connected,
  *    something like ... ProxyCommand='netcat -x 127.0.0.1:9050 %h %p'
  *
@@ -1108,7 +1314,7 @@ int uftx_proxy(char*host,char*prox,int*fd)
     if (rc > 0) { close(ds[0]); close(us[1]); sleep(1);
                       fd[0] = us[0]; fd[1] = ds[1]; return 0; }
 
-    /* if the return from for() is zero then we are the child process */
+    /* if return from fork() is zero then we *are* the child process  */
                   close(ds[1]); close(us[0]);
       close(0); dup(ds[0]); close(ds[0]);
       close(1); dup(us[1]); close(us[1]);
@@ -1125,18 +1331,23 @@ int uftx_proxy(char*host,char*prox,int*fd)
  *    This routine parses a UFT "control file" on the receiving host.
  *    Compare with standard Unix/POSIX stat() system call.
  *
- *        Note: a UFT "spool file" should not have ".cf" or ".df"
+ *        Note: a UFT "spool file" should not have the ".cf" or ".df"
  *              or similar qualifiers. It should be numeric, four digits
- *              (unless more digits are needed), and comprised of
+ *              (unless more digits are needed), file comprised of
  *              (at least) the ".cf" and ".df" physical Unix files.
  */
 int uft_stat(char*sid,struct UFTSTAT*us)
   { static char _eyecatcher[] = "uft_stat()";
-#ifdef UFT_POSIX
     int rc, fd, i, e, cl;
     char sn[256], cb[4096], *p, *q;
     struct  stat  statbuf;
     struct  tm  uft_stat_time;
+
+#ifdef UFT_POSIX
+ /* strptime() already prototyped */
+#else
+ extern char *strptime (const char *, const char *, struct tm *);
+#endif
 
     /* take the spool ID as numeric (akin to the inode in stat)       */
     us->uft_ino = atoi(uftx_basename(sid));
@@ -1282,12 +1493,9 @@ us->uft_from[0] = 0x00;
            else us->uft_title[0] = 0x00;
 
     return 0;
-#else
-    return -1;
-#endif
   }
 
-/* --------------------------------------------------------------- PURGE
+/* ----------------------------------------------------------- UFT_PURGE
  *    Remove all files (per known extensions) for this spool file.
  */
 int uft_purge(struct UFTSTAT*us)
@@ -1323,7 +1531,8 @@ int uft_purge(struct UFTSTAT*us)
   }
 
 /* ----------------------------------------------------------- UFTX_ATOI
- *    Convert string to integer recognizing K or M qualifiers.
+ *    Convert string to integer recognizing K, M, or G qualifiers.
+ *    FIXME: we should also have an atol for larger than 32-bit
  */
 int uftx_atoi(char*s)
   { static char _eyecatcher[] = "uftx_atoi()";
@@ -1333,7 +1542,8 @@ int uftx_atoi(char*s)
       { switch (*s)
           { case 0x00: return i; break;
             case 'K': case 'k': i = i * 1024; return i; break;
-            case 'M': case 'm': i = i * 1048576; return i; break;
+            case 'M': case 'm': i = i * 1024 * 1024; return i; break;
+            case 'G': case 'g': i = i * 1024 * 1024 * 1024; return i; break;
             default: i = i * 10 + (*s & 0x0F); break; }
         s++; }
     return i;
@@ -1433,8 +1643,8 @@ int uftctext(int s,char*b,int l)
       }
  */
 
-//  t[j] = 0x00;
-    j = htonb(b,t,j);
+/*  t[j] = 0x00;                                                      */
+    j = htonb((char*)b,t,j);
 
     return j;
   }
@@ -1543,8 +1753,8 @@ int uftdnext()
     /* increment the sequence number until a free slot is found       */
     for (n = n0; ++n; n != n0)
       { if (n > 9999) n = 1;         /* wrap at 10000 (0000 reserved) */
-//      (void) sprintf(temp,"%04d.cf",n);
-//      if (access(temp,0) != 0) break;
+/*      (void) sprintf(temp,"%04d.cf",n);                          // */
+/*      if (access(temp,0) != 0) break;                            // */
         /* loop while <nnnn>.cf exists (or .df or .ef or other)       */
         i = 0; while (*exts[i] != 0x00) {
             sprintf(temp,"%04d.%s",n,exts[i]);   /* the physical file */
@@ -1597,13 +1807,16 @@ int uftx_wtl(int s,char*b,int l)
 #ifdef OECS
             stratoe(b);       /* optionally translate ASCII to EBCDIC */
 #endif
-            b[o] = '\n';               /* put that newline at the end */
+/*          b[o] = '\n';               // put that newline at the end */
+            b[o-1] = '\n';             /* put that newline at the end */
             rc = write(s,b,o);
             if (rc < 0) return rc;      /* if error then bail out now */
             n = n + o;                        /* old school but works */
             o = 0;
           } else if (l <= 0 && o > 0) {
+#ifdef OECS
             for (i = 0; i < o; i++) b[i] = chratoe(b[i]);
+#endif
             rc = write(s,b,o);
             if (rc < 0) return rc;    } /* if error then bail out now */
         b = p;                           /* point to next line-o-text */
@@ -1652,7 +1865,7 @@ int uftx_e2l(int s,char*b,int l)
     return rc;
   }
 
-/* -------------------------------------------------------------- GETNDR
+/* --------------------------------------------------------- UFTX_GETNDR
  *    Get a NETDATA Record
  *    need: fd, buffer, bufmax, buflen, bufdex
  *    give: output (pointer), outlen (size/len), and adjust the buffer
@@ -1703,7 +1916,7 @@ int uftx_getndr(int fd,struct UFTNDIO*uftndio,int*flag,char**output,int*outlen)
 
 /* FIXME: check at this point if we have run off the end of the buffer */
 /*  if (uftndio->bufdex >= uftndio->buflen) ...                       */
-//  /* shift remainder left to start of buffer */
+    /* shift remainder left to start of buffer */
     /* adjust uftndio->buflen to match size of remainder */
     /* adjust size-to-read down accordingly */
     /* read at offset (past remainder) */
@@ -1713,7 +1926,7 @@ int uftx_getndr(int fd,struct UFTNDIO*uftndio,int*flag,char**output,int*outlen)
     return 0;
   }
 
-/* ---------------------------------------------------------------- NDFD
+/* ----------------------------------------------------------- UFTX_NDFD
  *    UFT Netdata Stream Decoder - Netdata via File Descriptors
  *        Note: maximum recovered record size is 64K bytes
  */
@@ -1752,16 +1965,19 @@ int uftx_ndfd(int fdi,int fdo,int flag)
             case UFT_ND_LAST:
                 memcpy(&b2[i],part,plen);
                 i = i + plen;
+                if (flag == 0x0000) rc = uftx_autotype(b2,i,&flag);
                 if (flag & UFT_DOTRANS) uftx_e2l(fdo,b2,i);
                                    else write(fdo,b2,i);
                 i = 0;
                 break;
-            case UFT_ND_FIRST|UFT_ND_LAST:
+            case UFT_ND_FIRST|UFT_ND_LAST:       /* first, last, only */
+                if (flag == 0x0000) rc = uftx_autotype(part,plen,&flag);
                 if (flag & UFT_DOTRANS) uftx_e2l(fdo,part,plen);
                                    else write(fdo,part,plen);
                 break;
             default:
-                fprintf(stderr,"mixed records\n");
+                fprintf(stderr,"uftx_ndfd(): mixed records\n");
+/* FIXME:       rc = ???                            set a return code */
                 break;
           }
       }
@@ -1769,7 +1985,7 @@ int uftx_ndfd(int fdi,int fdo,int flag)
     return rc;
   }
 
-/* ------------------------------------------------------------ ISBINARY
+/* ------------------------------------------------------- UFTX_ISBINARY
  *    This routine makes a best guess about the content, whether it is
  *    "binary" or textual, based on the record supplied to it.
  *     Returns: non-zero if the record appears to contain binary content
@@ -1777,19 +1993,20 @@ int uftx_ndfd(int fdi,int fdo,int flag)
 int uftx_isbinary(char*b,int l)
   { static char _eyecatcher[] = "uftx_isbinary()";
     int i; char *j;
-    char binz[] = { 0x01,
+    char binz[] = { 0x00,
+                    0x01,
                     0x02,
                     0x03,
                     0x04,
-                 /* 0x05  =  E TAB */
+                 /* 0x05  =  E TAB is textual */
                     0x06,
                     0x07, /* A BEL */
                     0x08, /* A BS */
-                 /* 0x09  =  A TAB */
-                 /* 0x0A  =  A LF */
+                 /* 0x09  =  A TAB is textual */
+                 /* 0x0A  =  A LF is textual */
                     0x0B,
                     0x0C, /* X FF */
-                 /* 0x0D  =  X CR */
+                 /* 0x0D  =  X CR is textual */
                     0x0E,
                     0x0F,
                     0x10,
@@ -1797,7 +2014,7 @@ int uftx_isbinary(char*b,int l)
                     0x12,
                     0x13,
                     0x14,
-                 /* 0x15  =  E NL */
+                 /* 0x15  =  E NL is textual */
                     0x16, /* E BS */
                     0x17,
                     0x18,
@@ -1808,16 +2025,30 @@ int uftx_isbinary(char*b,int l)
                     0x1D,
                     0x1E,
                     0x1F,
-                    0x00 };             /* null terminates the string */
+                    0xFF };            /* all ones terminates the set */
 
-    for (i = 0; i < l; i++)
-        for (j = binz; *j != 0x00; j++)
-            if (b[i] == *j) return 1;
+    /* if any byte in sample buffer is in above list call it binary   */
+    for (i = 0; i < l; i++)       /* step through the supplied sample */
+        for (j = binz; *j != 0xFF; j++)   /* looking for chars in set */
+            if (b[i] == *j) return 1;   /* if char in set then binary */
 
     return 0;
   }
 
-/* -------------------------------------------------------------- ABBREV
+/* ------------------------------------------------------- UFTX_AUTOTYPE
+ *    Modifies the flag based on binary/text interpretation of buffer.
+ */
+int uftx_autotype(char*b,int l,int*f)
+  { static char _eyecatcher[] = "uftx_autotype()";
+
+    if (*f & UFT_DOTRANS) return 0;      /* if ASCII already selected */
+    if (*f & UFT_NOTRANS) return 0;     /* if binary already selected */
+    if (uftx_isbinary(b,l) == 0) *f = *f | UFT_DOTRANS;
+                            else *f = *f | UFT_NOTRANS;
+    return 0;
+  }
+
+/* --------------------------------------------------------- UFTX_ABBREV
  * Returns length of info if info is an abbreviation of informat.
  * Returns zero if info does not match or is shorter than minlen.
  * Comparison is not case sensitive.
@@ -1829,6 +2060,261 @@ int uftx_abbrev(char*informat,char*info,int minlen)
         if (toupper(informat[i]) != toupper(info[i])) return 0;
     if (i < minlen) return 0;
     return i;
+  }
+
+/* ----------------------------------------------------------- UFTX_CCAP
+      "Command Capture" (capture the output of a UFT command)
+      This is a client-mode function used by both clients and servers.
+      Send a UFT command to the (connected) server
+      then read the response: 6 to buffer, 2 good, others bad.
+      Feed 6XX to main buffer and status (2, 3, 4, 5) to alternate.
+      Returns: positive (length of string in main), negative (error)
+      Negative return values usually convey code from UFT server.
+ */
+int uftx_ccap(int*fd,char*c,char*rb,int rl,char*sb,int sl)
+  {
+    int rc, l, n;
+    char mybuff[1024], *p;
+
+    rl = rl - 1; sl = sl - 1;      /* room for NULL string terminator */
+    n = 0;                            /* initial response length zero */
+
+    rc = tcpputs(fd[1],c);                       /* issue the command */
+
+    while (1)
+      { rc = uftx_getline(fd[0],mybuff,sizeof(mybuff)); /* get a line */
+        p = mybuff;  while (*p <= ' ' && *p != 0x00) p++;
+        switch (*p)
+          {
+            case '1':          /* output only if "verbose", then loop */
+                if (uftcflag & UFT_VERBOSE) /* putline */ ;
+                break;                                        /* loop */
+            case '2':                         /* store status, return */
+/*              while (*p > ' ') p++; if (*p == ' ') p++;             */
+                l = strlen(p); if (l > sl) l = sl;
+                memcpy(sb,p,l);
+                sb[l] = 0x00;
+                return n;           /* return 0 or length of response */
+                break;
+            case '6':                      /* queue into buffer, loop */
+                while (*p > ' ') p++; if (*p == ' ') p++;
+                l = strlen(p); if (l > rl) l = rl;
+                memcpy(rb,p,l);
+/*              rb[l++] = '\r';                                       */
+                rb[l++] = '\n'; rb[l] = 0x00; n = n + l;
+                rb = &rb[l];                 /* point to next segment */
+                break;                                        /* loop */
+            default:           /* report or store error, return error */
+                return -1;
+                break;
+          }
+      }
+  }
+
+/* ------------------------------------------------------------- SAPRINT
+ *        Name: saprint.c
+ */
+int saprint(void*buff,int blen)
+  {
+    int i, j, k, l;
+    char *strn;
+
+    union insa {                    /* to support either IPv4 or IPv6 */
+        struct sockaddr sa;                 /* as generic as possible */
+        struct sockaddr_in sa4;               /* sockaddr for AF_INET */
+#ifdef AF_INET6
+        struct sockaddr_in6 sa6;             /* sockaddr for AF_INET6 */
+#endif
+        unsigned short int family;     /* common address family value */
+               } insa;                           /* internet sockaddr */
+
+    if (blen > sizeof(insa)) blen = sizeof(insa);   /* cap the length */
+    memcpy((void*)&insa,buff,blen);           /* copy to local struct */
+    /* in this routine we only use insa to get the address family     */
+
+    strn = buff;               /* use the buffer as a string of bytes */
+
+    if (insa.family == AF_INET)                    /* an IPv4 address */
+      { j = (int) strn[4]; j = j & 0xff;               /* just 8 bits */
+        fprintf(stderr,"%d",j);                    /* the first octet */
+        k = blen; if (k > 8) k = 8;               /* mark end of addr */
+        for (i = 5; i < k; i++)               /* loop all after first */
+          { j = (int) strn[i]; j = j & 0xff;           /* just 8 bits */
+            fprintf(stderr,".%d",j); } }
+
+#ifdef AF_INET6
+    if (insa.family == AF_INET6)                   /* an IPv6 address */
+      { j = (((int)strn[8]) * 256) + ((int)strn[9]);
+        j = j & 0xffff;                        /* truncate to 16 bits */
+        fprintf(stderr,"%x",j);                   /* the first nibble */
+        k = blen; if (k > 24) k = 24;             /* mark end of addr */
+        for (i = 10; i < k; i = i + 2)        /* loop all after first */
+          { j = (((int)strn[i]) * 256) + ((int)strn[i+1]);
+            j = j & 0xffff;                    /* truncate to 16 bits */
+            fprintf(stderr,":%x",j); } }
+#endif
+
+    fprintf(stderr,"\n");
+
+    return 0;
+  }
+
+/* --------------------------------------------------------- UFTX_B64ENC
+ *    Encode content as base64.
+ */
+int uftx_b64enc(char*ib,int il,char*ob,int ol)
+  {
+    int i, j;
+    char *b64;
+
+    /*  define the Base 64 character set  */ 
+    b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
+          "ghijklmnopqrstuvwxyz0123456789+/";
+
+    i = j = 0;
+    while (il > 2)
+      {
+        ob[j++] = b64[ib[i]>>2]; 
+        ob[j++] = b64[((ib[i]<<4)+(ib[i+1]>>4))&0x3F]; 
+        ob[j++] = b64[((ib[i+1]<<2)+(ib[i+2]>>6))&0x3F]; 
+        ob[j++] = b64[ib[i+2]&0x3F]; 
+        i = i + 3;
+        il = il - 3;
+      }
+
+    switch (il)
+      {
+        case 0: break;
+        case 1: ob[j++] = b64[ib[i]>>2];
+                ob[j++] = b64[(ib[i]<<4)&0x3F];
+                ob[j++] = '=';
+                ob[j++] = '=';
+                break;
+        case 2: ob[j++] = b64[ib[i]>>2];
+                ob[j++] = b64[((ib[i]<<4)+(ib[i+1]>>4))*0x3F];
+                ob[j++] = b64[(ib[i+1]<<2)&0x3F];
+                ob[j++] = '=';
+                break;
+      }
+    ob[j] = 0x00;                      /* terminate the base64 string */
+
+    return j;
+  }
+
+/* --------------------------------------------------------- UFTX_B64DEC
+ *    Decode base64 into original content.
+ */
+int uftx_b64dq(int c)      /* just a helper routine for uftx_b64dec() */
+  { switch (c)
+      { case 'A': return 0x00;                                    break;
+        case 'B': return 0x01;                                    break;
+        case 'C': return 0x02;                                    break;
+        case 'D': return 0x03;                                    break;
+        case 'E': return 0x04;                                    break;
+        case 'F': return 0x05;                                    break;
+        case 'G': return 0x06;                                    break;
+        case 'H': return 0x07;                                    break;
+        case 'I': return 0x08;                                    break;
+        case 'J': return 0x09;                                    break;
+        case 'K': return 0x0a;                                    break;
+        case 'L': return 0x0b;                                    break;
+        case 'M': return 0x0c;                                    break;
+        case 'N': return 0x0d;                                    break;
+        case 'O': return 0x0e;                                    break;
+        case 'P': return 0x0f;                                    break;
+        case 'Q': return 0x10;                                    break;
+        case 'R': return 0x11;                                    break;
+        case 'S': return 0x12;                                    break;
+        case 'T': return 0x13;                                    break;
+        case 'U': return 0x14;                                    break;
+        case 'V': return 0x15;                                    break;
+        case 'W': return 0x16;                                    break;
+        case 'X': return 0x17;                                    break;
+        case 'Y': return 0x18;                                    break;
+        case 'Z': return 0x19;                                    break;
+        case 'a': return 0x1a;                                    break;
+        case 'b': return 0x1b;                                    break;
+        case 'c': return 0x1c;                                    break;
+        case 'd': return 0x1d;                                    break;
+        case 'e': return 0x1e;                                    break;
+        case 'f': return 0x1f;                                    break;
+        case 'g': return 0x20;                                    break;
+        case 'h': return 0x21;                                    break;
+        case 'i': return 0x22;                                    break;
+        case 'j': return 0x23;                                    break;
+        case 'k': return 0x24;                                    break;
+        case 'l': return 0x25;                                    break;
+        case 'm': return 0x26;                                    break;
+        case 'n': return 0x27;                                    break;
+        case 'o': return 0x28;                                    break;
+        case 'p': return 0x29;                                    break;
+        case 'q': return 0x2a;                                    break;
+        case 'r': return 0x2b;                                    break;
+        case 's': return 0x2c;                                    break;
+        case 't': return 0x2d;                                    break;
+        case 'u': return 0x2e;                                    break;
+        case 'v': return 0x2f;                                    break;
+        case 'w': return 0x30;                                    break;
+        case 'x': return 0x31;                                    break;
+        case 'y': return 0x32;                                    break;
+        case 'z': return 0x33;                                    break;
+        case '0': return 0x34;                                    break;
+        case '1': return 0x35;                                    break;
+        case '2': return 0x36;                                    break;
+        case '3': return 0x37;                                    break;
+        case '4': return 0x38;                                    break;
+        case '5': return 0x39;                                    break;
+        case '6': return 0x3a;                                    break;
+        case '7': return 0x3b;                                    break;
+        case '8': return 0x3c;                                    break;
+        case '9': return 0x3d;                                    break;
+        case '+': return 0x3e;                                    break;
+        case '/': return 0x3f;                                    break;
+        default:  return -1;                                  break; } }
+
+int uftx_b64dec(char*ib,int il,char*ob,int ol)
+  {   /* eye catcher */
+    int rc, i, j, c;
+
+    if (il == 0) il = strlen(ib);         /* input length is optional */
+    /* if input length given as zero then catch end-of-string marker  */
+
+    i = j = 0;
+
+    /* step through the input one byte at a time ignoring chaff       */
+    while (1)
+      { /* snag input */          c = uftx_b64dq((int)ib[i++]); il--;
+        while (c < 0 && il > 3) { c = uftx_b64dq((int)ib[i++]); il--; }
+
+        if (il < 0 || j >= ol) break;
+        ob[j] = (char) c<<2;          /* output block-of-three plus 0 */
+
+        /* bump input to 1 */     c = uftx_b64dq((int)ib[i++]); il--;
+        while (c < 0 && il > 3) { c = uftx_b64dq((int)ib[i++]); il--; }
+
+        if (il < 0 || j >= ol) break;
+        ob[j++] |= (char) c>>4;        /* current output still plus 0 */
+
+        if (il < 0 || j >= ol) break;
+        ob[j] = (char) c<<4;          /* output block-of-three plus 1 */
+
+        /* bump input to 2 */     c = uftx_b64dq((int)ib[i++]); il--;
+        while (c < 0 && il > 3) { c = uftx_b64dq((int)ib[i++]); il--; }
+
+        if (il < 0 || j >= ol) break;
+        ob[j++] |= (char) c>>2;        /* current output still plus 1 */
+
+        if (il < 0 || j >= ol) break;
+        ob[j] = (char) c<<6;          /* output block-of-three plus 2 */
+
+        /* bump input to 3 */     c = uftx_b64dq((int)ib[i++]); il--;
+        while (c < 0 && il > 3) { c = uftx_b64dq((int)ib[i++]); il--; }
+
+        if (il < 0 || j >= ol) break;
+        ob[j++] |= (char) c;           /* current output still plus 2 */
+      }
+
+    return j;
   }
 
 /* ------------------------------------------------------------ MSGWRITE
